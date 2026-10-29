@@ -1,0 +1,14 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+data/
+portfolio.db
+*.db-wal
+*.db-shm
+test-results/
+dist/
+plotly-cloud.toml
+.claude/

@@ -1,0 +1,2 @@
+# Schema changes are now applied by Services.database.initialize_database().
+# Run python data_base.py from the project root.

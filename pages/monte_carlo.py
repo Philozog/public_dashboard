@@ -1,0 +1,434 @@
+from io import StringIO
+
+import dash
+import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+from dash import Input, Output, dcc, html
+
+from Services import theme
+from Services.components import metric_card as _metric_card
+from Services.helper import load_data
+from Services.market import clean_returns, coverage_text, get_historical_prices
+from Services.performance import (
+    BENCHMARK_ANNUAL_RETURN,
+    DRIFT_SHRINKAGE,
+    MAX_ANNUAL_DRIFT,
+    simulate_paths,
+)
+
+DEFAULT_SIMULATIONS = 10000
+DEFAULT_YEARS = 1
+
+
+dash.register_page(
+    __name__,
+    path="/monte-carlo",
+    name="Monte Carlo",
+    title="Monte Carlo",
+    order=5,
+)
+
+
+def _empty_figure(title, message):
+    fig = go.Figure()
+    fig.update_layout(
+        title=title,
+        annotations=[
+            {
+                "text": message,
+                "xref": "paper",
+                "yref": "paper",
+                "x": 0.5,
+                "y": 0.5,
+                "showarrow": False,
+                "font": {"size": 15},
+            }
+        ],
+        xaxis={"visible": False},
+        yaxis={"visible": False},
+    )
+    return fig
+
+
+def _load_holdings():
+    df = load_data().copy()
+    if df.empty:
+        return df
+
+    df["ticker"] = df["ticker"].astype(str).str.strip().str.upper()
+    df = df[df["ticker"] != ""]
+
+    df["market_value_num"] = pd.to_numeric(df["market_value"], errors="coerce")
+    df["shares_num"] = pd.to_numeric(df["shares"], errors="coerce")
+    df["current_price_num"] = pd.to_numeric(df["current_price"], errors="coerce")
+
+    fallback_value = df["shares_num"].fillna(0) * df["current_price_num"].fillna(0)
+    df["position_value"] = df["market_value_num"].where(df["market_value_num"] > 0, fallback_value)
+    df["position_value"] = df["position_value"].where(df["position_value"] > 0, 0.0).fillna(0.0)
+    return df
+
+
+def _download_prices(tickers, period="1y"):
+    return get_historical_prices(tickers, period=period)
+
+
+def _build_weights(holdings, valid_tickers):
+    position_values = (
+        holdings.groupby("ticker", as_index=True)["position_value"]
+        .sum()
+        .reindex(valid_tickers)
+        .fillna(0.0)
+    )
+
+    total_value = float(position_values.sum())
+    if total_value <= 0:
+        return pd.Series(dtype=float), 0.0
+
+    return position_values / total_value, total_value
+
+
+def _simulate_portfolio_paths(returns, weights, initial_value, years, simulations):
+    return simulate_paths(returns, weights, initial_value, years, simulations)
+
+
+def _format_currency(value):
+    return f"${value:,.0f}"
+
+
+def _format_percent(value):
+    return f"{value:.1%}"
+
+
+def _build_projection_chart(years_axis, path_values):
+    percentile_5 = np.percentile(path_values, 5, axis=1)
+    percentile_25 = np.percentile(path_values, 25, axis=1)
+    percentile_50 = np.percentile(path_values, 50, axis=1)
+    percentile_75 = np.percentile(path_values, 75, axis=1)
+    percentile_95 = np.percentile(path_values, 95, axis=1)
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=years_axis,
+            y=percentile_95,
+            mode="lines",
+            line={"width": 0},
+            hoverinfo="skip",
+            showlegend=False,
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=years_axis,
+            y=percentile_5,
+            mode="lines",
+            fill="tonexty",
+            fillcolor="rgba(37, 99, 235, 0.15)",
+            line={"width": 0},
+            name="5th-95th percentile",
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=years_axis,
+            y=percentile_75,
+            mode="lines",
+            line={"width": 0},
+            hoverinfo="skip",
+            showlegend=False,
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=years_axis,
+            y=percentile_25,
+            mode="lines",
+            fill="tonexty",
+            fillcolor="rgba(29, 78, 216, 0.25)",
+            line={"width": 0},
+            name="25th-75th percentile",
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=years_axis,
+            y=percentile_50,
+            mode="lines",
+            line={"color": theme.ACCENT_BRIGHT, "width": 3},
+            name="Median path",
+        )
+    )
+    fig.update_layout(
+        title="Projected Portfolio Value Paths",
+        xaxis_title="Years",
+        yaxis_title="Portfolio Value",
+        legend={"orientation": "h", "y": 1.1},
+    )
+    fig.update_yaxes(tickprefix="$", separatethousands=True)
+    return fig
+
+
+def _build_distribution_chart(final_values, initial_value):
+    fig = go.Figure()
+    fig.add_trace(
+        go.Histogram(
+            x=final_values,
+            nbinsx=40,
+            marker={"color": "#38bdf8"},
+            name="Ending values",
+        )
+    )
+    for percentile, color in ((5, theme.NEGATIVE), (50, theme.TEXT_STRONG), (95, theme.POSITIVE)):
+        value = float(np.percentile(final_values, percentile))
+        fig.add_vline(
+            x=value,
+            line_width=2,
+            line_dash="dash",
+            line_color=color,
+            annotation_text=f"P{percentile}: {_format_currency(value)}",
+            annotation_position="top",
+        )
+
+    fig.add_vline(
+        x=float(initial_value),
+        line_width=2,
+        line_color=theme.MUTED,
+        annotation_text=f"Today: {_format_currency(initial_value)}",
+        annotation_position="bottom right",
+    )
+    fig.update_layout(
+        title="Distribution of Ending Portfolio Values",
+        xaxis_title="Ending Value",
+        yaxis_title="Simulation Count",
+    )
+    fig.update_xaxes(tickprefix="$", separatethousands=True)
+    return fig
+
+
+def _build_explanation(
+    current_value, median_value, downside_value, upside_value, loss_probability, years, simulations
+):
+    return html.Div(
+        [
+            html.H4("How to read this", style={"marginTop": "0"}),
+            html.P(
+                f"This page takes your current holdings, converts them into portfolio weights, "
+                f"uses the common history shown above, and runs {simulations:,} random future paths "
+                f"over {years} year{'s' if years != 1 else ''}."
+            ),
+            html.P(
+                f"The median path ends near {_format_currency(median_value)}. "
+                f"The 5th percentile ends near {_format_currency(downside_value)}, which is a rough stress case, "
+                f"and the 95th percentile ends near {_format_currency(upside_value)}, which is a strong upside case."
+            ),
+            html.P(
+                f"Starting from {_format_currency(current_value)}, the model estimates a "
+                f"{_format_percent(loss_probability)} chance of finishing below today's value."
+            ),
+            html.P(
+                f"This model rebalances daily to current invested weights and excludes cash and uncovered holdings. Volatility and correlations come from shared history; "
+                f"each holding's expected return is shrunk {DRIFT_SHRINKAGE:.0%} toward a {_format_percent(BENCHMARK_ANNUAL_RETURN)} "
+                f"long-run benchmark and capped at {_format_percent(MAX_ANNUAL_DRIFT)}, so a stock's recent rally or slump isn't "
+                f"assumed to continue at the same pace. It does not model trading, contributions, taxes, or regime changes."
+            ),
+        ],
+        className="panel",
+    )
+
+
+layout = html.Div(
+    [
+        dcc.Location(id="mc-location"),
+        html.H2("Portfolio Monte Carlo Simulation", className="subtitle"),
+        html.Div(
+            [
+                html.Div(
+                    [
+                        html.Label("Time horizon"),
+                        dcc.Dropdown(
+                            id="mc-years",
+                            options=[
+                                {"label": "1 year", "value": 1},
+                                {"label": "3 years", "value": 3},
+                                {"label": "5 years", "value": 5},
+                            ],
+                            value=DEFAULT_YEARS,
+                            clearable=False,
+                        ),
+                    ],
+                    style={"minWidth": "180px", "flex": "1"},
+                ),
+                html.Div(
+                    [
+                        html.Label("Simulation count"),
+                        dcc.Dropdown(
+                            id="mc-simulations",
+                            options=[
+                                {"label": "500", "value": 500},
+                                {"label": "1,000", "value": 1000},
+                                {"label": "5,000", "value": 5000},
+                                {"label": "10,000", "value": 10000},
+                            ],
+                            value=DEFAULT_SIMULATIONS,
+                            clearable=False,
+                        ),
+                    ],
+                    style={"minWidth": "180px", "flex": "1"},
+                ),
+            ],
+            style={"display": "flex", "gap": "12px", "flexWrap": "wrap", "marginBottom": "12px"},
+        ),
+        html.Div(
+            [
+                _metric_card("Modeled holdings value", "mc-current-value"),
+                _metric_card("Median Ending Value", "mc-median-value"),
+                _metric_card("5th Percentile", "mc-downside-value"),
+                _metric_card("95th Percentile", "mc-upside-value"),
+                _metric_card("Chance of Loss", "mc-loss-probability"),
+                _metric_card("Median CAGR", "mc-cagr"),
+            ],
+            style={"display": "flex", "gap": "12px", "flexWrap": "wrap", "marginBottom": "12px"},
+        ),
+        html.Div(id="mc-status", style={"marginBottom": "12px"}),
+        dcc.Graph(id="mc-projection-chart"),
+        dcc.Graph(id="mc-distribution-chart"),
+        html.Div(id="mc-explanation"),
+        dcc.Store(id="mc-price-cache"),
+    ]
+)
+
+
+if not hasattr(dash, "_monte_carlo_callback_registered"):
+    dash._monte_carlo_callback_registered = True
+
+    @dash.callback(
+        Output("mc-price-cache", "data"),
+        Input("mc-location", "pathname"),
+        Input("analysis-period", "value"),
+    )
+    def fetch_prices(_pathname, period="1y"):
+        holdings = _load_holdings()
+        if holdings.empty:
+            return {"error": "No holdings found. Add positions on the Portfolio page first."}
+
+        tickers = sorted(holdings["ticker"].dropna().unique().tolist())
+        prices = _download_prices(tickers, period)
+        if prices.empty:
+            return {"error": "Unable to fetch enough price history to run the simulation."}
+
+        prices = prices[[column for column in prices.columns if column in tickers]]
+        prices = prices.dropna(axis=1, how="all")
+        if prices.empty:
+            return {"error": "Not enough clean price history after filtering missing data."}
+
+        returns = clean_returns(prices, min_observations=30, log=True)
+
+        valid_tickers = returns.columns.tolist()
+        if returns.empty or not valid_tickers:
+            return {"error": "Return history is unavailable after filtering."}
+
+        min_obs = int(returns.notna().sum().min())
+        if min_obs < 30:
+            return {"error": "Not enough clean price history after filtering missing data."}
+
+        weights, current_value = _build_weights(holdings, valid_tickers)
+        if weights.empty or current_value <= 0:
+            return {"error": "Current portfolio value is zero, so the simulation cannot run."}
+
+        dropped = sorted(set(tickers) - set(valid_tickers))
+        return {
+            "coverage": coverage_text(holdings, returns, period),
+            "period": period,
+            "returns_json": returns.to_json(orient="split"),
+            "weights_json": weights.to_json(orient="split"),
+            "current_value": current_value,
+            "valid_tickers": valid_tickers,
+            "total_tickers": len(tickers),
+            "min_obs": min_obs,
+            "max_obs": int(returns.notna().sum().max()),
+            "dropped": dropped,
+            "error": None,
+        }
+
+    @dash.callback(
+        Output("mc-status", "children"),
+        Output("mc-projection-chart", "figure"),
+        Output("mc-distribution-chart", "figure"),
+        Output("mc-current-value", "children"),
+        Output("mc-median-value", "children"),
+        Output("mc-downside-value", "children"),
+        Output("mc-upside-value", "children"),
+        Output("mc-loss-probability", "children"),
+        Output("mc-cagr", "children"),
+        Output("mc-explanation", "children"),
+        Input("mc-price-cache", "data"),
+        Input("mc-years", "value"),
+        Input("mc-simulations", "value"),
+    )
+    def update_monte_carlo(cache, years, simulations):
+        empty_projection = _empty_figure(
+            "Projected Portfolio Value Paths", "No simulation data available."
+        )
+        empty_distribution = _empty_figure(
+            "Distribution of Ending Portfolio Values", "No simulation data available."
+        )
+        blank = ("--",) * 6
+
+        if cache is None:
+            return ("Loading...", empty_projection, empty_distribution, *blank, html.Div())
+
+        error = cache.get("error")
+        if error:
+            return (error, empty_projection, empty_distribution, *blank, html.Div(error))
+
+        returns = pd.read_json(StringIO(cache["returns_json"]), orient="split")
+        weights = pd.read_json(StringIO(cache["weights_json"]), orient="split", typ="series")
+        current_value = float(cache["current_value"])
+
+        years_axis, path_values = _simulate_portfolio_paths(
+            returns=returns,
+            weights=weights,
+            initial_value=current_value,
+            years=int(years or DEFAULT_YEARS),
+            simulations=int(simulations or DEFAULT_SIMULATIONS),
+        )
+
+        final_values = path_values[-1]
+        median_value = float(np.percentile(final_values, 50))
+        downside_value = float(np.percentile(final_values, 5))
+        upside_value = float(np.percentile(final_values, 95))
+        loss_probability = float(np.mean(final_values < current_value))
+        median_cagr = float((median_value / current_value) ** (1 / max(int(years), 1)) - 1)
+
+        n = len(cache["valid_tickers"])
+        status_parts = [
+            f"Using {n} of {cache['total_tickers']} holdings."
+            f" Observations per ticker: {cache['min_obs']}–{cache['max_obs']} trading days.",
+            cache["coverage"],
+        ]
+        if cache.get("dropped"):
+            status_parts.append(
+                f"Filtered due to missing price history: {', '.join(cache['dropped'])}."
+            )
+
+        return (
+            " ".join(status_parts),
+            _build_projection_chart(years_axis, path_values),
+            _build_distribution_chart(final_values, current_value),
+            _format_currency(current_value),
+            _format_currency(median_value),
+            _format_currency(downside_value),
+            _format_currency(upside_value),
+            _format_percent(loss_probability),
+            _format_percent(median_cagr),
+            _build_explanation(
+                current_value=current_value,
+                median_value=median_value,
+                downside_value=downside_value,
+                upside_value=upside_value,
+                loss_probability=loss_probability,
+                years=int(years or DEFAULT_YEARS),
+                simulations=int(simulations or DEFAULT_SIMULATIONS),
+            ),
+        )
