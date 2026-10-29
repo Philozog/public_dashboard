@@ -21,7 +21,7 @@ On Windows, tick **"Add python.exe to PATH"** on the first installer screen.
 Either:
 - **No Git:** on this GitHub page, click the green **Code** button →
   **Download ZIP**, then unzip it somewhere short like `C:\Apothicaire`, or
-- **With Git:** `git clone https://github.com/Philozog/REPO_NAME.git`
+- **With Git:** `git clone https://github.com/Philozog/public_dashboard.git`
 
 > On Windows, avoid very deep folders. Paths longer than ~260 characters
 > can make the install fail with "filename or extension is too long".
