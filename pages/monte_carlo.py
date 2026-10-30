@@ -16,6 +16,7 @@ from Services.performance import (
     MAX_ANNUAL_DRIFT,
     simulate_paths,
 )
+from Services.theme import blank_figure
 
 DEFAULT_SIMULATIONS = 10000
 DEFAULT_YEARS = 1
@@ -291,8 +292,8 @@ layout = html.Div(
             style={"display": "flex", "gap": "12px", "flexWrap": "wrap", "marginBottom": "12px"},
         ),
         html.Div(id="mc-status", style={"marginBottom": "12px"}),
-        dcc.Graph(id="mc-projection-chart"),
-        dcc.Graph(id="mc-distribution-chart"),
+        dcc.Graph(id="mc-projection-chart", figure=blank_figure()),
+        dcc.Graph(id="mc-distribution-chart", figure=blank_figure()),
         html.Div(id="mc-explanation"),
         dcc.Store(id="mc-price-cache"),
     ]

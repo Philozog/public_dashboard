@@ -9,6 +9,7 @@ from Services.helper import load_data
 from Services.market import clean_returns, coverage_text, get_historical_prices
 from Services.performance import risk_contributions, valid_covariance
 from Services.settings import get_settings
+from Services.theme import blank_figure
 
 dash.register_page(__name__, path="/covariance", name="Correlations", title="Correlations", order=3)
 
@@ -28,9 +29,9 @@ layout = html.Div(
             className="summary-grid",
         ),
         html.Div(id="covariance-status", className="data-status"),
-        dcc.Graph(id="covariance-heatmap"),
+        dcc.Graph(id="covariance-heatmap", figure=blank_figure()),
         html.Div(id="covariance-insights", className="panel"),
-        dcc.Graph(id="risk-contribution-chart"),
+        dcc.Graph(id="risk-contribution-chart", figure=blank_figure()),
         html.P(
             "Risk contribution is each holding's share of modeled portfolio variance, using current invested weights. "
             "A negative contribution can indicate a diversifying position. Cash is excluded."

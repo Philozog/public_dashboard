@@ -67,3 +67,19 @@ def register_template():
     )
     pio.templates[TEMPLATE_NAME] = go.layout.Template(layout=layout)
     pio.templates.default = TEMPLATE_NAME
+
+
+def blank_figure():
+    """Transparent placeholder for a dcc.Graph until its callback fills it.
+
+    Without one, Plotly renders its own white, light-themed empty plot.
+    """
+    fig = go.Figure()
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(visible=False),
+        yaxis=dict(visible=False),
+        margin=dict(l=0, r=0, t=0, b=0),
+    )
+    return fig

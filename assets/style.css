@@ -593,6 +593,78 @@ input[type="number"]:focus {
     box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
+/* Dash 4 components (dcc.Input, dcc.Dropdown, steppers) take their colors
+   from --Dash-* variables whose defaults are a light theme. Doubled :root
+   outranks Dash's own :root block regardless of stylesheet order. */
+:root:root {
+    --Dash-Fill-Inverse-Strong: #1e293b;
+    --Dash-Stroke-Strong: rgba(148, 163, 184, 0.45);
+    --Dash-Stroke-Weak: rgba(148, 163, 184, 0.22);
+    --Dash-Fill-Interactive-Strong: var(--accent);
+    --Dash-Fill-Interactive-Weak: var(--accent-soft);
+    --Dash-Text-Primary: var(--text-strong);
+    --Dash-Text-Strong: var(--text-strong);
+    --Dash-Text-Weak: #cbd5e1;
+    --Dash-Text-Disabled: var(--muted);
+    --Dash-Fill-Primary-Hover: rgba(148, 163, 184, 0.14);
+    --Dash-Fill-Primary-Active: rgba(148, 163, 184, 0.22);
+    --Dash-Fill-Disabled: rgba(148, 163, 184, 0.1);
+    --Dash-Shading-Strong: rgba(2, 6, 23, 0.6);
+    --Dash-Shading-Weak: rgba(2, 6, 23, 0.4);
+}
+
+.dash-input-container {
+    height: 40px;
+    border-radius: var(--radius-sm);
+    color: var(--text-strong);
+    overflow: hidden;
+}
+
+.dash-input-container:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* The border and focus ring live on the container; the inner field stays flat. */
+.dash-input-container .dash-input-element,
+.dash-input-container .dash-input-element:focus {
+    height: 100%;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.labeled-field {
+    display: flex;
+    flex: 1 1 100%;
+    align-items: center;
+    gap: 12px;
+}
+
+.labeled-field label {
+    color: var(--text);
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+.dash-dropdown {
+    border-radius: var(--radius-sm);
+    color: var(--text-strong);
+}
+
+/* Keep the global green button look off controls that are buttons in markup. */
+.dash-input-stepper,
+button.dash-dropdown,
+.dash-input-stepper:hover,
+button.dash-dropdown:hover {
+    color: var(--text-strong);
+    font-weight: 500;
+    box-shadow: none;
+    transform: none;
+    filter: none;
+}
+
 /* Buttons */
 button {
     height: 40px;

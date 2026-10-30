@@ -135,6 +135,28 @@ def warm_up():
     return _load_pipeline() is not None
 
 
+_loader = None
+_loader_lock = threading.Lock()
+
+
+def start_background_load():
+    """Begin loading the model on a daemon thread and return immediately.
+
+    Importing torch/transformers takes ~20s warm and minutes cold, so it
+    must never block a page request.
+    """
+    global _loader
+    with _loader_lock:
+        if _load_attempted or (_loader is not None and _loader.is_alive()):
+            return
+        _loader = threading.Thread(target=_load_pipeline, name="sentiment-model-load", daemon=True)
+        _loader.start()
+
+
+def is_loading():
+    return _pipeline is None and _loader is not None and _loader.is_alive()
+
+
 def backend_status():
     """What is actually scoring text right now, for display in the UI."""
     loaded = _pipeline is not None
@@ -151,6 +173,11 @@ def describe_backend():
     status = backend_status()
     if status["backend"] == "transformers":
         return "Scored by {} running locally on CPU.".format(status["model"])
+    if is_loading():
+        return (
+            "The AI model is still loading in the background, so these are keyword "
+            "scores for now. Press Refresh in a moment for model scores."
+        )
     reason = status["error"] or "model not loaded yet"
     return "Scored by the keyword fallback, not a model. Reason: {}".format(reason)
 
@@ -339,9 +366,10 @@ def _finalize(probabilities, backend="lex"):
 def score_texts(texts):
     """Score a list of strings. Returns one dict per input, same order.
 
-    Uses the transformers pipeline when it loads, the keyword lexicon
-    otherwise. Repeated texts are served from an in-process cache so
-    re-rendering the page costs nothing.
+    Uses the transformers pipeline once it has loaded, the keyword lexicon
+    otherwise, including while the model is still loading in the
+    background. Repeated texts are served from an in-process cache keyed
+    by backend, so model scores replace keyword scores once available.
     """
     global _load_error
 
@@ -349,7 +377,7 @@ def score_texts(texts):
     if not texts:
         return []
 
-    _load_pipeline()
+    start_background_load()
 
     results = [None] * len(texts)
     pending_indices = []

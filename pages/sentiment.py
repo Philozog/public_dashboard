@@ -24,7 +24,7 @@ from Services import sentiment as sentiment_service
 from Services.helper import load_data
 from Services.insights import prepare_holdings
 from Services.news import NewsFetchError, describe_fetch, fetch_portfolio_news
-from Services.theme import MUTED, NEGATIVE, POSITIVE, TEXT_STRONG
+from Services.theme import MUTED, NEGATIVE, POSITIVE, TEXT_STRONG, blank_figure
 
 MAX_NEWS_ITEMS = 24
 PER_TICKER = 8
@@ -442,11 +442,17 @@ layout = html.Div(
         html.Div(
             [
                 html.Div(
-                    dcc.Graph(id="sentiment-bar", config={"displayModeBar": False}),
+                    dcc.Graph(
+                        id="sentiment-bar", figure=blank_figure(), config={"displayModeBar": False}
+                    ),
                     className="card",
                 ),
                 html.Div(
-                    dcc.Graph(id="sentiment-scatter", config={"displayModeBar": False}),
+                    dcc.Graph(
+                        id="sentiment-scatter",
+                        figure=blank_figure(),
+                        config={"displayModeBar": False},
+                    ),
                     className="card",
                 ),
             ],
@@ -577,6 +583,8 @@ if not hasattr(dash, "_sentiment_callback_registered"):
             sentiment_service.describe_scores(scored),
             describe_fetch(),
         )
+        if sentiment_service.is_loading():
+            status = "{} {}".format(sentiment_service.describe_backend(), status)
         options = [{"label": row["ticker"], "value": row["ticker"]} for row in ticker_rows]
         return payload, status, options
 

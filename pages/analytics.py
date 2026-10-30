@@ -15,6 +15,7 @@ from Services.performance import (
     drawdowns,
 )
 from Services.settings import get_settings
+from Services.theme import blank_figure
 
 dash.register_page(__name__, path="/analytics", name="Analytics", title="Analytics", order=2)
 layout = html.Div(
@@ -37,11 +38,11 @@ layout = html.Div(
         ),
         html.P(
             "Historical model of today's invested holdings, rebalanced daily; cash is excluded. "
-                "Returns use adjusted prices and matching dates."
+            "Returns use adjusted prices and matching dates."
         ),
         html.Div(id="analytics-status", className="data-status"),
-        dcc.Graph(id="performance_chart"),
-        dcc.Graph(id="drawdown_chart"),
+        dcc.Graph(id="performance_chart", figure=blank_figure()),
+        dcc.Graph(id="drawdown_chart", figure=blank_figure()),
     ]
 )
 

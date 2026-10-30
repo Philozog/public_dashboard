@@ -20,9 +20,7 @@ app = Dash(
     suppress_callback_exceptions=True,
     title="Apothicaire",
 )
-nav_pages = [
-    page for page in dash.page_registry.values() if page["path"] != "/portfolio-news"
-]
+nav_pages = [page for page in dash.page_registry.values() if page["path"] != "/portfolio-news"]
 
 app.layout = html.Div(
     [
@@ -112,6 +110,16 @@ app.clientside_callback(
 )
 
 server = app.server
+
+
+@server.before_request
+def _warm_sentiment_model():
+    # On the first request, not at import: the debug reloader's parent process
+    # imports this module too but never serves requests.
+    from Services.sentiment import start_background_load
+
+    start_background_load()
+
 
 app.clientside_callback(
     "function(path) { return {display: ['/analytics','/covariance','/monte-carlo'].includes(path) ? 'flex' : 'none'}; }",

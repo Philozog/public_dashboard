@@ -15,6 +15,7 @@ from Services.ledger import account_summary, set_holding_type, transact, transac
 from Services.market import get_historical_prices
 from Services.news import NewsFetchError, describe_fetch, fetch_portfolio_news
 from Services.settings import get_settings
+from Services.theme import blank_figure
 from Services.updater import update_prices
 
 # Diverging fill for the map: rose (loss) -> neutral slate (flat) -> emerald (gain).
@@ -291,13 +292,20 @@ layout = html.Div(
                             placeholder="Holding type",
                             clearable=False,
                         ),
-                        dcc.Input(
-                            id="trade-fees",
-                            type="number",
-                            placeholder="Fees",
-                            min=0,
-                            value=0,
-                            step="any",
+                        # Starts at 0, so the placeholder never shows; label it explicitly.
+                        html.Div(
+                            [
+                                html.Label("Trade fees ($)", htmlFor="trade-fees"),
+                                dcc.Input(
+                                    id="trade-fees",
+                                    type="number",
+                                    placeholder="Fees",
+                                    min=0,
+                                    value=0,
+                                    step="any",
+                                ),
+                            ],
+                            className="labeled-field",
                         ),
                         html.Button("Record Buy", id="add-btn", n_clicks=0),
                         html.Button(
@@ -490,8 +498,10 @@ layout = html.Div(
         # Charts
         html.Div(
             [
-                html.Div(dcc.Graph(id="value-chart"), className="card"),
-                html.Div(dcc.Graph(id="holding-type-chart"), className="card"),
+                html.Div(dcc.Graph(id="value-chart", figure=blank_figure()), className="card"),
+                html.Div(
+                    dcc.Graph(id="holding-type-chart", figure=blank_figure()), className="card"
+                ),
             ],
             className="section-grid two",
         ),
