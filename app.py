@@ -1,8 +1,11 @@
+import hmac
 import json
+import os
 
 import dash
 from dash import Dash, Input, Output, dcc, html
 from dotenv import load_dotenv
+from flask import Response, request
 
 load_dotenv()
 
@@ -110,6 +113,28 @@ app.clientside_callback(
 )
 
 server = app.server
+
+# When hosted on the web, set DASHBOARD_PASSWORD so only you can open it.
+# Unset (the default on your own computer), no password is asked.
+_password = os.environ.get("DASHBOARD_PASSWORD", "")
+
+
+@server.route("/healthz")
+def _healthz():
+    return "ok"
+
+
+@server.before_request
+def _require_password():
+    if not _password or request.path == "/healthz":
+        return None
+    auth = request.authorization
+    if auth and hmac.compare_digest(auth.password or "", _password):
+        return None
+    return Response(
+        "Password required.", 401, {"WWW-Authenticate": 'Basic realm="Apothicaire"'}
+    )
+
 
 
 @server.before_request

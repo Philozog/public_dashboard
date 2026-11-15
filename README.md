@@ -9,48 +9,33 @@ own computer (`data/portfolio.db`). Nothing is uploaded anywhere.
 
 ## Getting started
 
-You need about 10 minutes, the first time only.
-
-### 1. Install Python
+### 1. Install Python (once)
 
 Download **Python 3.11 or newer** from [python.org/downloads](https://www.python.org/downloads/).
 On Windows, tick **"Add python.exe to PATH"** on the first installer screen.
+(On Windows the launcher below offers to install Python for you if it's missing.)
 
 ### 2. Download the dashboard
 
-Either:
-- **No Git:** on this GitHub page, click the green **Code** button →
-  **Download ZIP**, then unzip it somewhere short like `C:\Apothicaire`, or
-- **With Git:** `git clone https://github.com/Philozog/public_dashboard.git`
+On this GitHub page, click the green **Code** button → **Download ZIP**, then
+unzip it somewhere short like `C:\Apothicaire` or your Documents folder.
 
-> On Windows, avoid very deep folders. Paths longer than ~260 characters
-> can make the install fail with "filename or extension is too long".
+### 3. Double-click to start
 
-### 3. Install and run
+| Your computer | Double-click |
+| --- | --- |
+| Windows | `start-windows.bat` |
+| Mac | `start-mac.command` |
+| Linux | `start-linux.sh` (or run `./start-linux.sh` in a terminal) |
 
-Open a terminal **inside the dashboard folder** (Windows: open the folder in
-File Explorer, click the address bar, type `powershell` and press Enter).
+The first time, it sets everything up by itself (a few minutes). After that it
+starts in seconds. The dashboard opens in your browser at
+**http://127.0.0.1:8050**. Keep the black window open while you use it; close
+it to stop.
 
-**Windows**
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe main.py
-```
-
-**macOS / Linux**
-
-```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
-.venv/bin/python main.py
-```
-
-Then open **http://127.0.0.1:8050** in your browser. Leave the terminal open
-while you use the dashboard. Press `Ctrl+C` in it to stop.
-
-Next time, you only need the last line (`... main.py`).
+> **Windows "Windows protected your PC" message:** click **More info → Run anyway**.
+> **Mac "cannot be opened" message:** right-click `start-mac.command` → **Open** → **Open**
+> (only needed the first time).
 
 ### 4. Turn on news (optional)
 
@@ -77,14 +62,34 @@ The dashboard starts empty. To add your holdings:
 Analytics, Correlations and Monte Carlo fill in as soon as you have holdings.
 Adjust allocation targets and the risk-free rate under **Settings**.
 
+## Put it on a website (optional)
+
+To open your dashboard from any device, host it on [Render](https://render.com):
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Philozog/public_dashboard)
+
+1. Click the button and sign in to Render (GitHub sign-in works).
+2. When asked, enter a **DASHBOARD_PASSWORD** (this locks your site) and,
+   optionally, your **NEWS_API_KEY**.
+3. Click **Apply**. After a few minutes Render gives you a link like
+   `https://apothicaire-xxxx.onrender.com`. Open it and enter your password
+   (leave the username blank or type anything).
+
+The setup uses Render's **Starter plan (about $7/month)** because it includes a
+disk that keeps your portfolio saved. The free plan has no such disk and would
+erase your portfolio whenever the app restarts. The online copy is separate
+from the one on your computer; they don't sync.
+
 ## Updating, backups and troubleshooting
 
-- **Update to the latest version:** with Git, run `git pull` in the folder.
-  Otherwise, download the new ZIP and copy your old `data` folder (and `.env`)
-  into it. Your portfolio is never overwritten by an update.
+- **Update to the latest version:** download the new ZIP and copy your old
+  `data` folder (and `.env`) into it, or run `git pull` if you use Git. The
+  launcher installs any new packages automatically. Your portfolio is never overwritten by an update.
 - **Back up your portfolio:** use **Settings**, or copy the `data` folder.
 - **Error saying the address or port 8050 is already in use:** the dashboard
-  is already running in another terminal. Use that one, or close it first.
+  is already running in another window. Use that one, or close it first.
+- **Setup failed halfway:** delete the `.venv` folder and double-click the
+  launcher again.
 - **No news appears:** check that `.env` exists (not `.env.example`) and contains
   your key, then restart. The free NewsAPI plan has a daily request limit.
 
@@ -98,6 +103,10 @@ delayed or incomplete.
 ---
 
 # For developers
+
+Manual setup instead of the launchers: `python -m venv .venv`, install
+`requirements.txt` into it, then run `main.py`. Set `DASH_DEBUG=1` for Dash dev
+tools and auto-reload.
 
 Sentiment uses a clearly labeled keyword fallback unless the optional model
 dependencies are installed; see [sentiment setup](docs/sentiment.md).
@@ -164,6 +173,8 @@ publishing. It excludes secrets and private data by default; `--include-data`
 explicitly includes a current SQLite snapshot. Review that directory before
 using it as the Plotly Cloud project path.
 
+`render.yaml` describes the Render deployment (gunicorn, one worker, a
+persistent disk for SQLite, and `DASHBOARD_PASSWORD` basic auth).
 Configure secrets on the host and provision durable storage for the operational
 database. Bundling SQLite in a release does not guarantee persistence or sync
 local and cloud edits. Keep off-machine backups. Existing Plotly app identifiers
