@@ -27,12 +27,14 @@ app = Dash(
     suppress_callback_exceptions=True,
     title="Apothicaire",
 )
-# Disclosures gets its own button, set apart at the end of the menu.
+# Parameters and Disclosures live in the small top corner, not the main menu.
+CORNER_PAGES = [("Parameters", "/parameters"), ("Disclosures", "/disclosures")]
 nav_pages = [
     page
     for page in dash.page_registry.values()
-    if page["path"] not in ("/portfolio-news", "/disclosures")
+    if page["path"] not in ("/portfolio-news", *(path for _, path in CORNER_PAGES))
 ]
+SIGN_IN_ENABLED = bool(os.environ.get("DASHBOARD_USERS") or os.environ.get("DASHBOARD_PASSWORD"))
 
 app.layout = html.Div(
     [
@@ -40,6 +42,32 @@ app.layout = html.Div(
         dcc.Store(id="settings-version", data=0),
         html.Div(
             [
+                html.Div(
+                    [
+                        html.Nav(
+                            [
+                                dcc.Link(
+                                    name,
+                                    href=path,
+                                    className="corner-link",
+                                    id=f"corner-link-{index}",
+                                )
+                                for index, (name, path) in enumerate(CORNER_PAGES)
+                            ],
+                            className="corner-links",
+                            **{"aria-label": "Parameters and disclosures"},
+                        ),
+                        html.Div(
+                            [
+                                html.Span(id="account-label", className="muted"),
+                                html.A("Log out", href="/logout", className="logout-link"),
+                            ],
+                            className="account-bar",
+                            style=None if SIGN_IN_ENABLED else {"display": "none"},
+                        ),
+                    ],
+                    className="top-bar",
+                ),
                 html.H1("Apothicaire", className="main-title"),
                 # Navigation Bar
                 html.Div(
@@ -51,27 +79,8 @@ app.layout = html.Div(
                             id=f"nav-link-{index}",
                         )
                         for index, page in enumerate(nav_pages)
-                    ]
-                    + [
-                        html.Span(className="nav-divider", **{"aria-hidden": "true"}),
-                        dcc.Link(
-                            "Disclosures",
-                            href="/disclosures",
-                            className="nav-link nav-link-apart",
-                            id="nav-link-disclosures",
-                        ),
                     ],
                     className="navbar",
-                ),
-                html.Div(
-                    [
-                        html.Span(id="account-label", className="muted"),
-                        html.A("Log out", href="/logout", className="logout-link"),
-                    ],
-                    className="account-bar",
-                    style=None
-                    if os.environ.get("DASHBOARD_USERS") or os.environ.get("DASHBOARD_PASSWORD")
-                    else {"display": "none"},
                 ),
             ],
             id="app-header",
@@ -141,10 +150,11 @@ app.clientside_callback(
 )
 
 app.clientside_callback(
-    """function(path) {
-        return path === '/disclosures' ? 'nav-link nav-link-apart active' : 'nav-link nav-link-apart';
-    }""",
-    Output("nav-link-disclosures", "className"),
+    f"""function(path) {{
+        const paths = {json.dumps([path for _, path in CORNER_PAGES])};
+        return paths.map(p => path === p ? 'corner-link active' : 'corner-link');
+    }}""",
+    [Output(f"corner-link-{index}", "className") for index in range(len(CORNER_PAGES))],
     Input("url", "pathname"),
 )
 

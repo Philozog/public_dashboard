@@ -1373,34 +1373,34 @@ details > summary { cursor: pointer; padding: 8px 0; font-weight: 700; }
 }
 
 /* Signed-in name and Log out link on hosted copies */
-.account-bar {
+/* Small top bar: Parameters and Disclosures on the left, account on the right */
+.top-bar {
     display: flex;
-    justify-content: center;
+    justify-content: space-between;
     align-items: center;
     gap: 12px;
-    margin-top: 10px;
+    flex-wrap: wrap;
+    margin: -8px 0 14px;
     font-size: 13px;
 }
+.corner-links { display: flex; gap: 4px; }
+.corner-link {
+    padding: 4px 10px;
+    border-radius: 999px;
+    color: var(--muted);
+    font-weight: 600;
+    text-decoration: none;
+}
+.corner-link:hover, .corner-link.active { color: var(--text-strong); background: var(--accent-soft); }
+.account-bar { display: flex; align-items: center; gap: 12px; margin-left: auto; }
 .logout-link { color: inherit; opacity: 0.8; }
 .logout-link:hover { opacity: 1; }
-
-/* Disclosures page and its menu button, set apart from the others */
-.nav-divider {
-    width: 1px;
-    align-self: stretch;
-    margin: 6px 8px;
-    background: var(--border);
-}
-.nav-link-apart { font-weight: 500; }
 .disclosures {
     font-size: 14px;
     line-height: 1.7;
 }
 .disclosures p { margin: 0 0 14px; }
 .disclosures p:last-child { margin-bottom: 0; }
-@media (max-width: 640px) {
-    .nav-divider { display: none; }
-}
 
 /* Home: greeting, at-a-glance cards, alerts and headlines */
 .home-hero { text-align: center; margin: 4px 0 26px; }
