@@ -10,9 +10,11 @@ from dash.dependencies import Input, Output, State
 
 from Services import insights, theme
 from Services.components import metric_card
+from Services.database import current_path
 from Services.helper import load_data
 from Services.ledger import account_summary, set_holding_type, transact, transaction_history
 from Services.market import get_historical_prices
+from Services.names import company_names
 from Services.news import NewsFetchError, describe_fetch, fetch_portfolio_news
 from Services.settings import get_settings
 from Services.theme import blank_figure
@@ -184,6 +186,11 @@ def make_holding_type_chart(df):
     )
     fig.update_yaxes(range=[0, 100], ticksuffix="%", tickformat=".0f", title=None)
     return fig
+
+
+def _with_company_names(df):
+    names = company_names(df["ticker"], current_path()) if not df.empty else {}
+    return df.assign(company=df["ticker"].map(names).fillna(""))
 
 
 def _field(label, input_id, control):
@@ -367,6 +374,7 @@ layout = html.Div(
                         }
                         for key, label in [
                             ("ticker", "Ticker"),
+                            ("company", "Company"),
                             ("shares", "Shares"),
                             ("avg_price", "Average cost"),
                             ("current_price", "Price"),
@@ -620,7 +628,7 @@ def modify_data(
     )
     targets = get_settings()["targets"]
     return (
-        df.to_dict("records"),
+        _with_company_names(df).to_dict("records"),
         make_portfolio_map(chart),
         make_holding_type_chart(chart),
         message,
