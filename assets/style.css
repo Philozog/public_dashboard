@@ -1509,3 +1509,20 @@ details > summary { cursor: pointer; padding: 8px 0; font-weight: 700; }
 .home-lead-title:hover { text-decoration: underline; }
 .home-lead-text { margin: 0; color: var(--text); font-size: 15px; line-height: 1.6; }
 .home-lead-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+/* Manage holdings: compact fields side by side, buttons below */
+.holding-form {
+    display: grid;
+    grid-template-columns: 150px 130px 160px 200px 120px;
+    gap: 12px;
+    align-items: end;
+}
+.form-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.form-field label { color: var(--muted); font-size: 13px; font-weight: 600; }
+.form-field input,
+.form-field .dash-input-container,
+.form-field .dash-dropdown { width: 100%; min-width: 0; }
+.holding-actions { margin-top: 14px; }
+@media (max-width: 900px) {
+    .holding-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
