@@ -49,6 +49,7 @@ def _empty_figure(title, message):
         xaxis={"visible": False},
         yaxis={"visible": False},
     )
+    fig.update_yaxes(automargin=True, title_standoff=16)
     return fig
 
 
@@ -161,12 +162,24 @@ def _build_projection_chart(years_axis, path_values):
         )
     )
     fig.update_layout(
-        title="Projected Portfolio Value Paths",
+        title={"text": "Projected Portfolio Value Paths", "y": 0.97, "yanchor": "top"},
         xaxis_title="Years",
         yaxis_title="Portfolio Value",
-        legend={"orientation": "h", "y": 1.1},
+        # Legend on its own line between the title and the plot, with space around it.
+        legend={
+            "orientation": "h",
+            "x": 0,
+            "xanchor": "left",
+            "y": 1.02,
+            "yanchor": "bottom",
+            "itemwidth": 40,
+            "tracegroupgap": 24,
+            "font": {"size": 12},
+        },
+        margin={"t": 85},
     )
     fig.update_yaxes(tickprefix="$", separatethousands=True)
+    fig.update_yaxes(automargin=True, title_standoff=16)
     return fig
 
 
@@ -204,6 +217,7 @@ def _build_distribution_chart(final_values, initial_value):
         yaxis_title="Simulation Count",
     )
     fig.update_xaxes(tickprefix="$", separatethousands=True)
+    fig.update_yaxes(automargin=True, title_standoff=16)
     return fig
 
 
@@ -257,7 +271,7 @@ layout = html.Div(
                             clearable=False,
                         ),
                     ],
-                    style={"minWidth": "180px", "flex": "1"},
+                    style={"width": "180px"},
                 ),
                 html.Div(
                     [
@@ -274,7 +288,7 @@ layout = html.Div(
                             clearable=False,
                         ),
                     ],
-                    style={"minWidth": "180px", "flex": "1"},
+                    style={"width": "180px"},
                 ),
                 html.Button("Run simulation", id="mc-run-btn", n_clicks=0, className="mc-run"),
             ],
