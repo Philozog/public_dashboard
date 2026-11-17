@@ -12,6 +12,7 @@ from Services import insights, theme
 from Services.components import metric_card
 from Services.database import current_path
 from Services.helper import load_data
+from Services.importer import parse_positions
 from Services.ledger import account_summary, set_holding_type, transact, transaction_history
 from Services.market import get_historical_prices
 from Services.names import company_names
@@ -350,6 +351,62 @@ layout = html.Div(
             ],
             className="card portfolio-controls",
         ),
+        # Import holdings from a broker or Yahoo Finance CSV export
+        html.Div(
+            [
+                html.Div("Import from file", className="card-title"),
+                html.P(
+                    "Export your holdings as a CSV file from Yahoo Finance (open the portfolio, then "
+                    "Export) or from your broker's Positions page, then upload it here. You'll see "
+                    "a preview before anything is saved.",
+                    className="muted",
+                ),
+                dcc.Upload(
+                    id="import-upload",
+                    children=html.Div(["Drop a CSV file here or ", html.B("choose a file")]),
+                    accept=".csv,text/csv",
+                    max_size=2_000_000,
+                    style={
+                        "border": "1px dashed rgba(148, 163, 184, 0.45)",
+                        "borderRadius": "8px",
+                        "padding": "18px",
+                        "textAlign": "center",
+                        "cursor": "pointer",
+                    },
+                ),
+                html.Div(id="import-preview", style={"marginTop": "14px"}),
+                html.Div(
+                    [
+                        html.Div(
+                            [
+                                html.Label("Holding type for all", htmlFor="import-type"),
+                                dcc.Dropdown(
+                                    id="import-type",
+                                    options=[
+                                        {"label": "Core Holding", "value": "Core"},
+                                        {"label": "High Conviction", "value": "High Conviction"},
+                                        {"label": "Moonshot", "value": "Moonshot"},
+                                    ],
+                                    value="Core",
+                                    clearable=False,
+                                    style={"width": "200px"},
+                                ),
+                            ],
+                            className="form-field",
+                        ),
+                        html.Button("Import holdings", id="import-confirm", n_clicks=0),
+                        html.Button(
+                            "Cancel", id="import-cancel", n_clicks=0, className="secondary"
+                        ),
+                    ],
+                    id="import-actions",
+                    style={"display": "none"},
+                ),
+                dcc.Store(id="import-rows"),
+                dcc.Store(id="import-done"),
+            ],
+            className="card",
+        ),
         # Holdings table
         html.Div(
             [
@@ -566,6 +623,7 @@ layout = html.Div(
     Input("quote-refresh-btn", "n_clicks"),
     Input("interval-component", "n_intervals"),
     Input("settings-version", "data"),
+    Input("import-done", "data"),
     State("ticker-input", "value"),
     State("shares-input", "value"),
     State("avgprice-input", "value"),
@@ -579,6 +637,7 @@ def modify_data(
     _refresh,
     _interval,
     _settings,
+    _imported,
     ticker,
     shares,
     price,
@@ -844,3 +903,110 @@ if not hasattr(dash, "_portfolio_inline_news_registered"):
                 style={"padding": "12px 0"},
             )
         return [_inline_news_card(a) for a in articles]
+
+
+ACTIONS_SHOWN = {
+    "display": "flex",
+    "gap": "12px",
+    "alignItems": "flex-end",
+    "flexWrap": "wrap",
+    "marginTop": "12px",
+}
+
+
+@dash.callback(
+    Output("import-rows", "data"),
+    Output("import-preview", "children"),
+    Output("import-actions", "style"),
+    Output("import-confirm", "children"),
+    Input("import-upload", "contents"),
+    State("import-upload", "filename"),
+    prevent_initial_call=True,
+)
+def preview_import(contents, filename):
+    hidden = {"display": "none"}
+    if not contents:
+        # Cleared after an import or a cancel: keep whatever message is showing.
+        return (dash.no_update,) * 4
+    try:
+        positions, notes = parse_positions(contents)
+    except ValueError as exc:
+        message = html.P(f"Couldn't read {filename}: {exc}", style={"color": theme.NEGATIVE})
+        return None, message, hidden, "Import holdings"
+    held = set(load_data()["ticker"])
+    rows = [
+        html.Tr(
+            [
+                html.Td(p["ticker"], style={"fontWeight": "700"}),
+                html.Td(f"{p['shares']:,.6g}"),
+                html.Td(f"${p['avg_cost']:,.2f}"),
+                html.Td(
+                    "adds to your current shares" if p["ticker"] in held else "", className="muted"
+                ),
+            ]
+        )
+        for p in positions
+    ]
+    preview = html.Div(
+        [
+            html.P(f"Found {len(positions)} holdings in {filename}:"),
+            html.Table(
+                [html.Tr([html.Th(h) for h in ("Ticker", "Shares", "Avg cost", "")])] + rows,
+                style={"borderSpacing": "16px 4px", "marginLeft": "-16px"},
+            ),
+            *[html.P(note, className="muted", style={"margin": "4px 0"}) for note in notes],
+            html.P(
+                "You can change each holding's type afterwards with Update type.",
+                className="muted",
+                style={"marginTop": "8px"},
+            ),
+        ]
+    )
+    return positions, preview, ACTIONS_SHOWN, f"Import {len(positions)} holdings"
+
+
+@dash.callback(
+    Output("import-preview", "children", allow_duplicate=True),
+    Output("import-rows", "data", allow_duplicate=True),
+    Output("import-done", "data"),
+    Output("import-upload", "contents"),
+    Output("import-actions", "style", allow_duplicate=True),
+    Input("import-confirm", "n_clicks"),
+    State("import-rows", "data"),
+    State("import-type", "value"),
+    prevent_initial_call=True,
+)
+def confirm_import(clicks, positions, holding_type):
+    if not clicks or not positions:
+        return (dash.no_update,) * 5
+    saved, failed = 0, []
+    for p in positions:
+        try:
+            transact(
+                "buy",
+                ticker=p["ticker"],
+                shares=p["shares"],
+                price=p["avg_cost"],
+                holding_type=holding_type,
+                note="Imported from file",
+            )
+            saved += 1
+        except (ValueError, sqlite3.Error) as exc:
+            failed.append(f"{p['ticker']}: {exc}")
+    message = [html.P(f"Imported {saved} holdings.", style={"color": theme.POSITIVE})]
+    message += [html.P(f"Not saved: {f}", style={"color": theme.NEGATIVE}) for f in failed]
+    return html.Div(message), None, saved, None, {"display": "none"}
+
+
+@dash.callback(
+    Output("import-preview", "children", allow_duplicate=True),
+    Output("import-rows", "data", allow_duplicate=True),
+    Output("import-upload", "contents", allow_duplicate=True),
+    Output("import-actions", "style", allow_duplicate=True),
+    Input("import-cancel", "n_clicks"),
+    prevent_initial_call=True,
+)
+def cancel_import(clicks):
+    if not clicks:
+        return (dash.no_update,) * 4
+    return "", None, None, {"display": "none"}
