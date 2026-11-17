@@ -370,8 +370,32 @@ class PriceCacheTests(unittest.TestCase):
         self.assertEqual(fetch.call_args_list[1].kwargs["tickers"], ["QQQ"])  # only the new one
         self.assertTrue(fetch.call_args_list[0].kwargs["threads"])
 
+    def ticker(self, history):
+        class FakeTicker:
+            def __init__(self, symbol):
+                self.symbol = symbol
+
+            def history(self, **kwargs):
+                return history(self.symbol)
+
+        return FakeTicker
+
+    def test_dropped_ticker_is_recovered_one_by_one(self):
+        recovered = pd.DataFrame({"Close": np.arange(1, 41, dtype=float)}, index=self.index)
+        with (
+            patch.object(market.yf, "download", side_effect=self.download),
+            patch.object(market.yf, "Ticker", self.ticker(lambda s: recovered)),
+            patch.object(market.time, "sleep"),
+        ):
+            prices = market.get_historical_prices(["AAA", "BAD"], "3y")
+        self.assertEqual(list(prices.columns), ["AAA", "BAD"])
+        self.assertEqual(prices["BAD"].iloc[-1], 40)
+
     def test_failed_ticker_is_not_retried_immediately(self):
-        with patch.object(market.yf, "download", side_effect=self.download) as fetch:
+        with (
+            patch.object(market.yf, "download", side_effect=self.download) as fetch,
+            patch.object(market.yf, "Ticker", self.ticker(lambda s: pd.DataFrame())),
+        ):
             prices = market.get_historical_prices(["AAA", "BAD"], "1y")
             market.get_historical_prices(["AAA", "BAD"], "1y")
         self.assertEqual(list(prices.columns), ["AAA"])

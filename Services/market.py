@@ -46,6 +46,27 @@ FAILED_SECONDS = 5 * 60  # don't retry a failed ticker on every page view
 DOWNLOAD_TIMEOUT = 15  # seconds per request
 
 
+def _download_one_by_one(tickers, period):
+    found = {}
+    for index, ticker in enumerate(tickers):
+        if index:
+            time.sleep(0.4)
+        try:
+            history = yf.Ticker(ticker).history(
+                period=period, auto_adjust=True, timeout=DOWNLOAD_TIMEOUT
+            )
+        except Exception as exc:
+            LOG.warning("Retry for %s failed: %s", ticker, exc)
+            continue
+        if history is not None and not history.empty and "Close" in history:
+            series = history["Close"].replace([np.inf, -np.inf], np.nan)
+            series.index = pd.to_datetime(series.index, utc=True).tz_convert(None).normalize()
+            series = series[series > 0].dropna()
+            if not series.empty:
+                found[ticker] = series[~series.index.duplicated(keep="last")]
+    return pd.concat(found, axis=1).sort_index() if found else pd.DataFrame()
+
+
 def get_historical_prices(tickers, period="1y", interval="1d"):
     """Daily adjusted closes, one column per ticker.
 
@@ -89,6 +110,19 @@ def get_historical_prices(tickers, period="1y", interval="1d"):
         except Exception:
             LOG.exception("Historical price download failed")
             fresh = pd.DataFrame()
+        # Yahoo sometimes drops tickers from a parallel batch (it throttles
+        # busy servers). Retry those one at a time, gently, before giving up.
+        retry = [t for t in missing if t not in fresh.columns or fresh[t].dropna().empty][:25]
+        if retry:
+            recovered = _download_one_by_one(retry, period)
+            if not recovered.empty:
+                fresh = (
+                    recovered
+                    if fresh.empty
+                    else fresh.drop(columns=recovered.columns, errors="ignore").join(
+                        recovered, how="outer"
+                    )
+                )
         with _lock:
             for ticker in missing:
                 series = fresh[ticker].dropna() if ticker in fresh.columns else None
@@ -134,4 +168,13 @@ def coverage_text(holdings, returns, period, benchmark=None):
         )
         + (f"Excluded: {', '.join(missing)}. " if missing else "")
         + (f"Benchmark: {benchmark}." if benchmark else "")
+    )
+
+
+def no_history_message(period):
+    label = {"6mo": "6-month", "1y": "1-year", "3y": "3-year", "5y": "5-year"}.get(period, period)
+    return (
+        f"Yahoo Finance didn't return {label} price history for your holdings right now "
+        "(it sometimes limits requests). Try again in a few minutes, or choose a shorter "
+        "History window above."
     )

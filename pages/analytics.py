@@ -6,7 +6,14 @@ from dash import Input, Output, dcc, html
 
 from Services.components import metric_card as _metric_card
 from Services.helper import load_data
-from Services.market import clean_returns, coverage_text, get_historical_prices
+from Services.market import (
+    clean_returns,
+    coverage_text,
+    get_historical_prices,
+)
+from Services.market import (
+    no_history_message as _no_history,
+)
 from Services.performance import (
     compute_performance_metrics,
     compute_portfolio_returns,
@@ -82,8 +89,13 @@ def update_analytics(pathname, period="1y", benchmark="SPY", _version=None):
         return unavailable("No invested holdings.")
     tickers = holdings.ticker.tolist()
     prices = get_historical_prices(tickers + [benchmark], period=period)
-    if prices.empty or benchmark not in prices:
-        return unavailable("Price history or the selected benchmark is unavailable.")
+    if prices.empty:
+        return unavailable(_no_history(period))
+    if benchmark not in prices:
+        return unavailable(
+            f"Yahoo Finance didn't return history for the benchmark {benchmark} right now. "
+            "Try again in a few minutes or pick another benchmark."
+        )
     # Keep low-sample data out of displayed estimates in normal operation.
     returns = clean_returns(prices.reindex(columns=tickers), min_observations=30)
     bench = compute_returns(prices[benchmark])

@@ -6,7 +6,14 @@ from dash import Input, Output, dcc, html
 
 from Services.components import metric_card as _metric_card
 from Services.helper import load_data
-from Services.market import clean_returns, coverage_text, get_historical_prices
+from Services.market import (
+    clean_returns,
+    coverage_text,
+    get_historical_prices,
+)
+from Services.market import (
+    no_history_message as _no_history,
+)
 from Services.performance import risk_contributions, valid_covariance
 from Services.settings import get_settings
 from Services.theme import blank_figure
@@ -74,7 +81,7 @@ def refresh_covariance(_pathname, period="1y", benchmark="SPY", _version=None):
         return empty("No invested holdings.")
     prices = get_historical_prices(holdings.ticker.tolist() + [benchmark], period)
     if prices.empty:
-        return empty("Historical prices are unavailable.")
+        return empty(_no_history(period))
     returns = clean_returns(prices.reindex(columns=holdings.ticker.tolist()))
     bench = (
         prices[benchmark].pct_change(fill_method=None).dropna()
