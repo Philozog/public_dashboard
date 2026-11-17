@@ -1526,3 +1526,14 @@ details > summary { cursor: pointer; padding: 8px 0; font-weight: 700; }
 @media (max-width: 900px) {
     .holding-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* Monte Carlo: settings and Run button on one row */
+.mc-controls {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    margin-bottom: 12px;
+}
+.mc-run { height: 40px; padding: 0 22px; }
+.mc-status { margin-bottom: 12px; color: var(--muted); }
