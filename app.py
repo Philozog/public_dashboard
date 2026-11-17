@@ -1,14 +1,13 @@
-import hmac
 import json
 import os
 
 import dash
 from dash import Dash, Input, Output, dcc, html
 from dotenv import load_dotenv
-from flask import Response, request
 
 load_dotenv()
 
+from Services import accounts
 from Services.database import get_engine
 from Services.theme import register_template
 
@@ -44,6 +43,16 @@ app.layout = html.Div(
                         for index, page in enumerate(nav_pages)
                     ],
                     className="navbar",
+                ),
+                html.Div(
+                    [
+                        html.Span(id="account-label", className="muted"),
+                        html.A("Log out", href="/logout", className="logout-link"),
+                    ],
+                    className="account-bar",
+                    style=None
+                    if os.environ.get("DASHBOARD_USERS") or os.environ.get("DASHBOARD_PASSWORD")
+                    else {"display": "none"},
                 ),
             ],
             id="app-header",
@@ -114,9 +123,9 @@ app.clientside_callback(
 
 server = app.server
 
-# When hosted on the web, set DASHBOARD_PASSWORD so only you can open it.
-# Unset (the default on your own computer), no password is asked.
-_password = os.environ.get("DASHBOARD_PASSWORD", "")
+# Sign-in for hosted copies (see Services/accounts.py). On your own computer,
+# with no DASHBOARD_USERS or DASHBOARD_PASSWORD set, nobody is asked to sign in.
+accounts.install(server)
 
 
 @server.route("/healthz")
@@ -124,17 +133,10 @@ def _healthz():
     return "ok"
 
 
-@server.before_request
-def _require_password():
-    if not _password or request.path == "/healthz":
-        return None
-    auth = request.authorization
-    if auth and hmac.compare_digest(auth.password or "", _password):
-        return None
-    return Response(
-        "Password required.", 401, {"WWW-Authenticate": 'Basic realm="Apothicaire"'}
-    )
-
+@app.callback(Output("account-label", "children"), Input("url", "pathname"))
+def _show_account(_path):
+    name = accounts.current_user()
+    return f"Signed in as {name}" if name else ""
 
 
 @server.before_request

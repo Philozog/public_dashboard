@@ -68,16 +68,43 @@ To open your dashboard from any device, host it on [Render](https://render.com):
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Philozog/public_dashboard)
 
 1. Click the button and sign in to Render (GitHub sign-in works).
-2. When asked, enter a **DASHBOARD_PASSWORD** (this locks your site) and,
-   optionally, your **NEWS_API_KEY**.
+2. When asked, fill in **DASHBOARD_USERS** with your name and a password,
+   like `yourname:a-long-password` (see the next section), and optionally
+   your **NEWS_API_KEY**.
 3. Click **Apply**. After a few minutes Render gives you a link like
-   `https://apothicaire-xxxx.onrender.com`. Open it and enter your password
-   (leave the username blank or type anything).
+   `https://apothicaire-xxxx.onrender.com`. Open it and sign in with your
+   name and password.
 
 The setup uses Render's **Starter plan (about $7/month)** because it includes a
 disk that keeps your portfolio saved. The free plan has no such disk and would
 erase your portfolio whenever the app restarts. The online copy is separate
 from the one on your computer; they don't sync.
+
+### Give friends and family their own account
+
+Each person signs in with their own name and password and has a **separate
+portfolio**. Nobody can see anyone else's holdings.
+
+1. In Render, open your service → **Environment**.
+2. Edit **DASHBOARD_USERS** and list everyone as `name:password`, separated
+   by commas:
+
+   ```
+   alex:my-long-password, sam:another-long-password, mom:third-password
+   ```
+
+   - Put **yourself first**: the first name keeps the portfolio that's
+     already on the site.
+   - Names use lowercase letters, numbers, `-` or `_`. Passwords need at
+     least 8 characters and can't contain a comma.
+3. Click **Save Changes**. The site restarts in about a minute.
+4. Send each person the link plus their own name and password, privately.
+
+To remove someone, delete their entry and save; they're signed out at once
+and their portfolio stays stored in case you add them back. **Log out** is
+at the top of every page. After 5 wrong passwords, that device must wait
+15 minutes. You (the Render account owner) can see everyone's passwords in
+Render, so tell people not to reuse a password from elsewhere.
 
 ## Updating, backups and troubleshooting
 
@@ -174,7 +201,8 @@ explicitly includes a current SQLite snapshot. Review that directory before
 using it as the Plotly Cloud project path.
 
 `render.yaml` describes the Render deployment (gunicorn, one worker, a
-persistent disk for SQLite, and `DASHBOARD_PASSWORD` basic auth).
+persistent disk for SQLite, and per-person sign-in from `DASHBOARD_USERS`;
+see `Services/accounts.py`).
 Configure secrets on the host and provision durable storage for the operational
 database. Bundling SQLite in a release does not guarantee persistence or sync
 local and cloud edits. Keep off-machine backups. Existing Plotly app identifiers
