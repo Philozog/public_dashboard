@@ -1,25 +1,286 @@
-from datetime import date
+from datetime import datetime, timezone
 
 import dash
-from dash import dcc, html
+import plotly.graph_objects as go
+from dash import Input, Output, dcc, html
+
+from Services import accounts
+from Services.helper import load_data
+from Services.home_summary import BENCHMARK, alerts, glance, time_ago
+from Services.insights import prepare_holdings
+from Services.market import get_historical_prices
+from Services.news import NewsFetchError, fetch_portfolio_news
+from Services.sentiment import score_articles
 
 dash.register_page(__name__, path="/", name="Home", title="Apothicaire", order=0)
 
 
 def layout(**_kwargs):
+    name = accounts.current_user()
     return html.Div(
         [
-            html.Div(className="cover-orb cover-orb-a"),
-            html.Div(className="cover-orb cover-orb-b"),
+            dcc.Store(id="home-name", data=name.title() if name else ""),
             html.Div(
                 [
-                    html.Div("Apothicaire", className="cover-wordmark"),
-                    html.P("Risk Management", className="cover-tagline"),
-                    dcc.Link("Enter →", href="/portfolio", className="button-link cover-cta"),
+                    html.Div("Apothicaire", className="home-wordmark"),
+                    html.H2(id="home-greeting", className="home-greeting"),
+                    html.P(id="home-date", className="home-date"),
                 ],
-                className="cover-content",
+                className="home-hero",
             ),
-            html.Div(f"{date.today():%A, %d %B %Y}", className="cover-footer"),
+            dcc.Loading(html.Div(id="home-glance", className="home-glance"), type="dot"),
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            html.H3("Needs your attention", className="card-title"),
+                            dcc.Loading(html.Div(id="home-alerts"), type="dot"),
+                        ],
+                        className="card home-panel",
+                    ),
+                    html.Div(
+                        [
+                            html.Div(
+                                [
+                                    html.H3("Top headlines", className="card-title"),
+                                    dcc.Link(
+                                        "All news →", href="/sentiment", className="home-more"
+                                    ),
+                                ],
+                                className="home-panel-head",
+                            ),
+                            dcc.Loading(html.Div(id="home-news"), type="dot"),
+                        ],
+                        className="card home-panel",
+                    ),
+                ],
+                className="home-panels",
+            ),
         ],
-        className="cover",
+        className="home",
     )
+
+
+# Greeting, date and US market status use the visitor's own clock.
+dash.clientside_callback(
+    """function(name) {
+        const now = new Date();
+        const h = now.getHours();
+        const part = h < 5 ? 'Good evening' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+        const date = now.toLocaleDateString(undefined, {weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'});
+        const et = new Date(now.toLocaleString('en-US', {timeZone: 'America/New_York'}));
+        const day = et.getDay(), minute = et.getHours() * 60 + et.getMinutes();
+        let market;
+        if (day === 0 || day === 6) market = 'US market closed for the weekend';
+        else if (minute >= 570 && minute < 960) market = 'US market open until 4:00 pm ET';
+        else if (minute < 570) market = 'US market opens at 9:30 am ET';
+        else market = 'US market closed, opens 9:30 am ET';
+        return [name ? part + ', ' + name : part, date + ' · ' + market + ' (regular hours; holidays not shown)'];
+    }""",
+    Output("home-greeting", "children"),
+    Output("home-date", "children"),
+    Input("home-name", "data"),
+)
+
+
+def _signed_pct(value):
+    if value is None:
+        return html.Span("—", className="muted")
+    return html.Span(f"{value:+.2%}", className="home-pos" if value >= 0 else "home-neg")
+
+
+def _sparkline(series):
+    figure = go.Figure(
+        go.Scatter(
+            x=series.index,
+            y=series.values,
+            mode="lines",
+            line=dict(color="#34d399", width=2),
+            fill="tozeroy",
+            fillcolor="rgba(52, 211, 153, 0.10)",
+            hovertemplate="%{x|%d %b}: $%{y:,.0f}<extra></extra>",
+        )
+    )
+    low, high = float(series.min()), float(series.max())
+    pad = (high - low) * 0.1 or high * 0.01 or 1
+    figure.update_layout(
+        height=70,
+        margin=dict(l=0, r=0, t=4, b=0),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(visible=False),
+        yaxis=dict(visible=False, range=[low - pad, high + pad]),
+        showlegend=False,
+    )
+    return dcc.Graph(figure=figure, config={"displayModeBar": False}, className="home-spark")
+
+
+def _card(title, main, *details, extra=None):
+    return html.Div(
+        [
+            html.Div(title, className="metric-title"),
+            html.Div(main, className="metric-value home-main"),
+            *[html.Div(line, className="home-detail") for line in details],
+            extra,
+        ],
+        className="metric-card home-card",
+    )
+
+
+def _glance_cards(data):
+    day = data["day_change"]
+    value_line = (
+        [
+            "Latest day: ",
+            html.Span(
+                f"{'+' if day >= 0 else '−'}${abs(day):,.0f}",
+                className="home-pos" if day >= 0 else "home-neg",
+            ),
+            " (",
+            _signed_pct(data["day_pct"]),
+            ")",
+        ]
+        if day is not None
+        else "Latest-day change unavailable"
+    )
+    spark = _sparkline(data["spark"]) if len(data["spark"]) >= 2 else None
+
+    you, spy = data["day_pct"], data["spy_day_pct"]
+    if you is None or spy is None:
+        verdict = "Comparison unavailable"
+    elif you >= spy:
+        verdict = "Ahead of the S&P 500"
+    else:
+        verdict = "Behind the S&P 500"
+
+    movers = data["movers"]
+    if movers:
+        best = movers[0]
+        mover_lines = [["Best: ", html.B(best[0]), " ", _signed_pct(best[1])]]
+        if len(movers) > 1:
+            worst = movers[-1]
+            mover_lines.append(["Worst: ", html.B(worst[0]), " ", _signed_pct(worst[1])])
+        mover_main = html.Span(best[0])
+    else:
+        mover_main, mover_lines = "—", ["Price history unavailable"]
+
+    updated = data["updated"]
+    return html.Div(
+        [
+            _card(
+                "Portfolio value",
+                f"${data['value']:,.2f}",
+                value_line,
+                extra=html.Div(
+                    [spark, html.Div("Today's holdings, last 6 months", className="home-note")]
+                )
+                if spark is not None
+                else None,
+            ),
+            _card(
+                f"You vs the S&P 500 ({BENCHMARK})",
+                verdict,
+                ["Latest day: you ", _signed_pct(you), " · S&P ", _signed_pct(spy)],
+                [
+                    "This year: you ",
+                    _signed_pct(data["ytd_pct"]),
+                    " · S&P ",
+                    _signed_pct(data["spy_ytd_pct"]),
+                ],
+                html.Span("Based on today's holdings at past prices.", className="home-note"),
+            ),
+            _card("Biggest movers, latest day", mover_main, *mover_lines),
+            _card(
+                "Prices last updated",
+                time_ago(
+                    updated.to_pydatetime() if updated is not None else None,
+                    datetime.now(timezone.utc),
+                ),
+                updated.strftime("%d %b, %H:%M UTC") if updated is not None else "No price yet",
+                dcc.Link("Refresh on Portfolio →", href="/portfolio", className="home-more"),
+            ),
+        ],
+        className="home-cards",
+    )
+
+
+def _empty_state():
+    return html.Div(
+        [
+            html.H3("Your portfolio is empty", className="card-title"),
+            html.P("Add your first holding to see your value, today's movers and alerts here."),
+            dcc.Link("Add a holding →", href="/portfolio", className="button-link"),
+        ],
+        className="card home-empty",
+    )
+
+
+@dash.callback(
+    Output("home-glance", "children"),
+    Output("home-alerts", "children"),
+    Input("home-name", "data"),
+)
+def _load_summary(_name):
+    raw = load_data()
+    holdings = prepare_holdings(raw)
+    if holdings.empty:
+        return _empty_state(), html.P(
+            "Nothing yet. Alerts appear once you add holdings.", className="muted"
+        )
+    prices = get_historical_prices(list(holdings["ticker"]) + [BENCHMARK], period="1y")
+    data = glance(holdings, prices, raw_holdings=raw)
+    items = alerts(holdings, raw, data["movers"])
+    if not items:
+        alert_view = html.P("All clear. Nothing needs your attention.", className="home-clear")
+    else:
+        alert_view = html.Ul(
+            [html.Li(text, className=f"home-alert home-alert-{level}") for level, text in items],
+            className="home-alert-list",
+        )
+    return _glance_cards(data), alert_view
+
+
+@dash.callback(Output("home-news", "children"), Input("home-name", "data"))
+def _load_news(_name):
+    holdings = prepare_holdings(load_data())
+    if holdings.empty:
+        return html.P("Headlines about your holdings appear here.", className="muted")
+    tickers = list(holdings["ticker"])
+    try:
+        articles = fetch_portfolio_news(tickers, per_ticker=1, max_items=3)
+        if len(articles) < 3:
+            articles = fetch_portfolio_news(tickers, per_ticker=3, max_items=3)
+    except NewsFetchError as exc:
+        message = str(exc)
+        if "NEWS_API_KEY" in message:
+            message = "Add a NewsAPI key to see headlines (see README)."
+        return html.P(message, className="muted")
+    if not articles:
+        return html.P("No recent headlines about your holdings.", className="muted")
+    now = datetime.now(timezone.utc)
+    items = []
+    for article in score_articles(articles):
+        label = article["sentiment"]["label"]
+        items.append(
+            html.Li(
+                [
+                    html.Span(label.title(), className=f"home-tone home-tone-{label}"),
+                    html.Div(
+                        [
+                            html.A(
+                                article["title"],
+                                href=article["url"],
+                                target="_blank",
+                                rel="noopener noreferrer",
+                            ),
+                            html.Div(
+                                f"{article['ticker']} · {article['source']} · {time_ago(article['published_at'], now)}",
+                                className="home-note",
+                            ),
+                        ]
+                    ),
+                ],
+                className="home-headline",
+            )
+        )
+    return html.Ul(items, className="home-headlines")
