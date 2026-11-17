@@ -15,17 +15,15 @@ holdings stop migration instead of being discarded. A unique ticker constraint
 prevents new duplicates. Schema versions are recorded in `PRAGMA user_version`.
 
 Existing positions become **opening balances**, dated when the ledger starts.
-Their original purchase dates, prior sales, deposits, dividends and fees are
-unknown. No historical transactions are fabricated. Opening cash is zero: record
-the actual cash available as a deposit before recording new purchases.
+Their original purchase dates, prior sales and fees are unknown. No historical
+transactions are fabricated. Cash is not tracked.
 
 ## Using the Portfolio page
 
 - Record buys and sells using quantity, execution price and optional fees.
-  Fractional shares are supported. Purchases require recorded cash; sales cannot
-  exceed the shares held. Invalid operations roll back and show a message.
+  Fractional shares are supported. Purchases don't need recorded cash; sales
+  cannot exceed the shares held. Invalid operations roll back and show a message.
 - Use **Update type** to change an existing holding's category without a trade.
-- Record deposits, withdrawals, dividends and fees under **Cash movements**.
 - Realized P&L uses average cost, with purchase fees included in cost basis and
   sale fees deducted from proceeds. It is not a tax-lot report.
 - Transaction history is append-only through the UI. It begins at migration;
@@ -54,9 +52,10 @@ the daily excess-return regression intercept, annualized arithmetically using
 square shortfall below the daily risk-free target across all observations.
 Drawdown includes the initial investment before the first return.
 
-**Recorded account return** links observed portfolio valuations, including cash.
-Deposits and withdrawals are excluded using a pre-flow valuation immediately
-before each recorded flow. Dividends and fees affect returns. Observations occur
+**Recorded account return** links observed valuations of the holdings. Each buy
+counts as money added and each sale as money taken out, using a valuation
+immediately before the trade, so trades themselves are not returns. Trade fees
+reduce returns. Observations occur
 on quote refreshes and transactions, not through a continuously running market
 feed. Stale quotes or missing activity will affect this account return. Earlier
 history cannot be reconstructed from the original positions-only database.
