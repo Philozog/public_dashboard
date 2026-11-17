@@ -41,37 +41,69 @@ def extract_prices(data, tickers):
     )
 
 
+CACHE_SECONDS = 30 * 60  # daily history barely changes within half an hour
+FAILED_SECONDS = 5 * 60  # don't retry a failed ticker on every page view
+DOWNLOAD_TIMEOUT = 15  # seconds per request
+
+
 def get_historical_prices(tickers, period="1y", interval="1d"):
+    """Daily adjusted closes, one column per ticker.
+
+    Each (ticker, period) is cached on its own and shared by every page, so
+    Home, Analytics, Correlations and Monte Carlo reuse one download, and
+    switching benchmark only fetches the new benchmark. Missing tickers are
+    downloaded together in one parallel request.
+    """
     tickers = sorted({str(t).strip().upper() for t in tickers if str(t).strip()})
     if not tickers:
         return pd.DataFrame()
     if period not in PERIODS or interval != "1d":
         raise ValueError("Unsupported history window or interval.")
-    key = (tuple(tickers), period, interval)
+    now = time.monotonic()
+    found, missing = {}, []
     with _lock:
-        cached = _cache.get(key)
-        if cached and time.monotonic() - cached[0] < 900:
-            return cached[1].copy()
-    try:
-        data = yf.download(
-            tickers=tickers,
-            period=period,
-            interval=interval,
-            progress=False,
-            auto_adjust=True,
-            group_by="column",
-            threads=False,
-        )
-        prices = extract_prices(data, tickers)
-    except Exception:
-        LOG.exception("Historical price download failed")
-        return pd.DataFrame()
-    if not prices.empty:
+        for ticker in tickers:
+            cached = _cache.get((ticker, period))
+            if cached is None:
+                missing.append(ticker)
+            elif cached[1] is None:  # recent failure
+                if now - cached[0] >= FAILED_SECONDS:
+                    missing.append(ticker)
+            elif now - cached[0] < CACHE_SECONDS:
+                found[ticker] = cached[1]
+            else:
+                missing.append(ticker)
+    if missing:
+        try:
+            data = yf.download(
+                tickers=missing,
+                period=period,
+                interval=interval,
+                progress=False,
+                auto_adjust=True,
+                group_by="column",
+                threads=True,
+                timeout=DOWNLOAD_TIMEOUT,
+            )
+            fresh = extract_prices(data, missing)
+        except Exception:
+            LOG.exception("Historical price download failed")
+            fresh = pd.DataFrame()
         with _lock:
-            if len(_cache) >= 32:
+            for ticker in missing:
+                series = fresh[ticker].dropna() if ticker in fresh.columns else None
+                ok = series is not None and not series.empty
+                _cache[(ticker, period)] = (time.monotonic(), series if ok else None)
+                if ok:
+                    found[ticker] = series
+            while len(_cache) > 400:
                 _cache.pop(next(iter(_cache)))
-            _cache[key] = (time.monotonic(), prices.copy())
-    return prices
+        failed = [t for t in missing if t not in found]
+        if failed:
+            LOG.warning("No price history for %s (%s)", ", ".join(failed), period)
+    if not found:
+        return pd.DataFrame()
+    return pd.concat(found, axis=1).sort_index()[[t for t in tickers if t in found]].copy()
 
 
 def clean_returns(prices, min_observations=30, log=False):

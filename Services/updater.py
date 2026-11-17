@@ -33,7 +33,8 @@ def update_prices(force=False, path=None):
             interval="1m",
             auto_adjust=False,
             progress=False,
-            threads=False,
+            threads=True,
+            timeout=15,
             group_by="column",
         )
     except Exception as exc:

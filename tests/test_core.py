@@ -345,3 +345,34 @@ class CorrectionTests(unittest.TestCase):
         database.initialize_database(old)
         ledger.correct_holding("A", 2, 10, "Core", path=old)
         self.assertEqual(len(ledger.transaction_history(old)), 2)
+
+
+class PriceCacheTests(unittest.TestCase):
+    def setUp(self):
+        patcher = patch.object(market, "_cache", {})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.index = pd.bdate_range("2026-01-01", periods=40)
+
+    def download(self, **kwargs):
+        tickers = kwargs["tickers"]
+        columns = pd.MultiIndex.from_product([["Close"], tickers])
+        values = np.tile(np.arange(1, 41, dtype=float)[:, None], (1, len(tickers)))
+        frame = pd.DataFrame(values, index=self.index, columns=columns)
+        return frame.drop(columns=[("Close", "BAD")], errors="ignore")
+
+    def test_tickers_are_cached_individually_and_shared(self):
+        with patch.object(market.yf, "download", side_effect=self.download) as fetch:
+            first = market.get_historical_prices(["AAA", "BBB", "SPY"], "1y")
+            second = market.get_historical_prices(["AAA", "BBB", "QQQ"], "1y")
+        self.assertEqual(list(first.columns), ["AAA", "BBB", "SPY"])
+        self.assertEqual(list(second.columns), ["AAA", "BBB", "QQQ"])
+        self.assertEqual(fetch.call_args_list[1].kwargs["tickers"], ["QQQ"])  # only the new one
+        self.assertTrue(fetch.call_args_list[0].kwargs["threads"])
+
+    def test_failed_ticker_is_not_retried_immediately(self):
+        with patch.object(market.yf, "download", side_effect=self.download) as fetch:
+            prices = market.get_historical_prices(["AAA", "BAD"], "1y")
+            market.get_historical_prices(["AAA", "BAD"], "1y")
+        self.assertEqual(list(prices.columns), ["AAA"])
+        self.assertEqual(fetch.call_count, 1)
