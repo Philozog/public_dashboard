@@ -169,6 +169,22 @@ def initialize_database(path=None):
                 if "quote_checked_at" not in columns:
                     conn.execute("ALTER TABLE portfolio ADD COLUMN quote_checked_at TEXT")
                 conn.execute("PRAGMA user_version=2")
+        if version < 3:
+            # Allow "correction" entries (fixing a mistyped holding). SQLite can't
+            # change a CHECK constraint in place, so rebuild the table, keeping every row.
+            if version >= 1:
+                backup_database(path)
+            with _open(path) as conn:
+                conn.execute("BEGIN IMMEDIATE")
+                sql = conn.execute(
+                    "SELECT sql FROM sqlite_master WHERE type='table' AND name='transactions'"
+                ).fetchone()[0]
+                if "'correction'" not in sql:
+                    conn.execute("ALTER TABLE transactions RENAME TO transactions_v2")
+                    conn.execute(sql.replace("'fee')", "'fee','correction')"))
+                    conn.execute("INSERT INTO transactions SELECT * FROM transactions_v2")
+                    conn.execute("DROP TABLE transactions_v2")
+                conn.execute("PRAGMA user_version=3")
         _ready.add(key)
     return path
 

@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS portfolio (
 );
 CREATE TABLE IF NOT EXISTS transactions (
  id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT NOT NULL,
- kind TEXT NOT NULL CHECK(kind IN ('opening','buy','sell','deposit','withdrawal','dividend','fee')),
+ kind TEXT NOT NULL CHECK(kind IN ('opening','buy','sell','deposit','withdrawal','dividend','fee','correction')),
  ticker TEXT, shares REAL NOT NULL DEFAULT 0, price REAL NOT NULL DEFAULT 0,
  amount REAL NOT NULL DEFAULT 0, fees REAL NOT NULL DEFAULT 0,
  realized_pnl REAL NOT NULL DEFAULT 0, note TEXT NOT NULL DEFAULT ''

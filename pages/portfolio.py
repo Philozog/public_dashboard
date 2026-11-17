@@ -13,7 +13,13 @@ from Services.components import metric_card
 from Services.database import current_path
 from Services.helper import load_data
 from Services.importer import parse_positions
-from Services.ledger import account_summary, set_holding_type, transact, transaction_history
+from Services.ledger import (
+    account_summary,
+    correct_holding,
+    set_holding_type,
+    transact,
+    transaction_history,
+)
 from Services.market import get_historical_prices
 from Services.names import company_names
 from Services.news import NewsFetchError, describe_fetch, fetch_portfolio_news
@@ -191,7 +197,7 @@ def make_holding_type_chart(df):
 
 def _with_company_names(df):
     names = company_names(df["ticker"], current_path()) if not df.empty else {}
-    return df.assign(company=df["ticker"].map(names).fillna(""))
+    return df.assign(company=df["ticker"].map(names).fillna(""), edit="Edit")
 
 
 def _field(label, input_id, control):
@@ -407,6 +413,63 @@ layout = html.Div(
             ],
             className="card",
         ),
+        # Correct or delete a mistyped holding (opened by a row's Edit link)
+        html.Div(id="edit-status", role="status", **{"aria-live": "polite"}),
+        html.Div(
+            [
+                html.Div(id="edit-title", className="card-title"),
+                html.P(
+                    "Fix a typo in shares, average cost or type. Corrections and deletions are "
+                    "kept in your history but don't count as a buy, a sale or a gain.",
+                    className="muted",
+                ),
+                html.Div(
+                    [
+                        _field(
+                            "Shares",
+                            "edit-shares",
+                            dcc.Input(id="edit-shares", type="number", min=0.000001, step="any"),
+                        ),
+                        _field(
+                            "Average cost ($)",
+                            "edit-price",
+                            dcc.Input(id="edit-price", type="number", min=0.000001, step="any"),
+                        ),
+                        _field(
+                            "Holding type",
+                            "edit-type",
+                            dcc.Dropdown(
+                                id="edit-type",
+                                options=[
+                                    {"label": "Core Holding", "value": "Core"},
+                                    {"label": "High Conviction", "value": "High Conviction"},
+                                    {"label": "Moonshot", "value": "Moonshot"},
+                                    {"label": "Unassigned", "value": "Unassigned"},
+                                ],
+                                clearable=False,
+                            ),
+                        ),
+                    ],
+                    className="holding-form",
+                ),
+                html.Div(
+                    [
+                        html.Button("Save correction", id="edit-save", n_clicks=0),
+                        html.Button(
+                            "Delete holding", id="edit-delete", n_clicks=0, className="secondary"
+                        ),
+                        html.Button("Cancel", id="edit-cancel", n_clicks=0, className="secondary"),
+                    ],
+                    className="toolbar holding-actions",
+                ),
+                dcc.ConfirmDialog(id="edit-confirm-delete"),
+                dcc.Store(id="edit-ticker"),
+                dcc.Store(id="edit-done"),
+            ],
+            id="edit-card",
+            className="card",
+            style={"display": "none"},
+        ),
         # Holdings table
         html.Div(
             [
@@ -439,6 +502,7 @@ layout = html.Div(
                             ("Total_Profit_Loss", "Unrealized P&L"),
                             ("holding_type", "Holding type"),
                             ("quote_updated_at", "Quote time (UTC)"),
+                            ("edit", ""),
                         ]
                     ],
                     sort_action="native",
@@ -468,6 +532,13 @@ layout = html.Div(
                         {
                             "if": {"row_index": "odd"},
                             "backgroundColor": "rgba(148, 163, 184, 0.04)",
+                        },
+                        {
+                            "if": {"column_id": "edit"},
+                            "color": theme.ACCENT_BRIGHT,
+                            "fontWeight": "700",
+                            "cursor": "pointer",
+                            "textDecoration": "underline",
                         },
                         {
                             "if": {"column_id": "ticker"},
@@ -624,6 +695,7 @@ layout = html.Div(
     Input("interval-component", "n_intervals"),
     Input("settings-version", "data"),
     Input("import-done", "data"),
+    Input("edit-done", "data"),
     State("ticker-input", "value"),
     State("shares-input", "value"),
     State("avgprice-input", "value"),
@@ -638,6 +710,7 @@ def modify_data(
     _interval,
     _settings,
     _imported,
+    _edited,
     ticker,
     shares,
     price,
@@ -1010,3 +1083,111 @@ def cancel_import(clicks):
     if not clicks:
         return (dash.no_update,) * 4
     return "", None, None, {"display": "none"}
+
+
+HIDDEN = {"display": "none"}
+
+
+@dash.callback(
+    Output("edit-card", "style"),
+    Output("edit-ticker", "data"),
+    Output("edit-title", "children"),
+    Output("edit-shares", "value"),
+    Output("edit-price", "value"),
+    Output("edit-type", "value"),
+    Output("portfolio-table", "active_cell"),
+    Input("portfolio-table", "active_cell"),
+    State("portfolio-table", "derived_viewport_data"),
+    prevent_initial_call=True,
+)
+def open_editor(cell, rows):
+    if not cell or cell.get("column_id") != "edit" or not rows or cell["row"] >= len(rows):
+        return (dash.no_update,) * 7
+    row = rows[cell["row"]]
+    title = f"Edit {row['ticker']}" + (f" · {row['company']}" if row.get("company") else "")
+    return (
+        None,
+        row["ticker"],
+        title,
+        row["shares"],
+        round(float(row["avg_price"]), 4),
+        row.get("holding_type") or "Unassigned",
+        None,  # clear the selection so the same Edit link can be clicked again
+    )
+
+
+@dash.callback(
+    Output("edit-status", "children"),
+    Output("edit-done", "data"),
+    Output("edit-card", "style", allow_duplicate=True),
+    Input("edit-save", "n_clicks"),
+    State("edit-ticker", "data"),
+    State("edit-shares", "value"),
+    State("edit-price", "value"),
+    State("edit-type", "value"),
+    prevent_initial_call=True,
+)
+def save_correction(clicks, ticker, shares, price, holding_type):
+    if not clicks or not ticker:
+        return (dash.no_update,) * 3
+    try:
+        message = correct_holding(ticker, shares, price, holding_type)
+    except (ValueError, sqlite3.Error) as exc:
+        return (
+            html.P(f"Not saved: {exc}", style={"color": theme.NEGATIVE}),
+            dash.no_update,
+            dash.no_update,
+        )
+    return (
+        html.P(message, style={"color": theme.POSITIVE}),
+        datetime.now(timezone.utc).isoformat(),
+        HIDDEN,
+    )
+
+
+@dash.callback(
+    Output("edit-confirm-delete", "displayed"),
+    Output("edit-confirm-delete", "message"),
+    Input("edit-delete", "n_clicks"),
+    State("edit-ticker", "data"),
+    prevent_initial_call=True,
+)
+def ask_delete(clicks, ticker):
+    if not clicks or not ticker:
+        return dash.no_update, dash.no_update
+    return True, f"Delete {ticker} from your portfolio? Use this only for an entry made by mistake."
+
+
+@dash.callback(
+    Output("edit-status", "children", allow_duplicate=True),
+    Output("edit-done", "data", allow_duplicate=True),
+    Output("edit-card", "style", allow_duplicate=True),
+    Input("edit-confirm-delete", "submit_n_clicks"),
+    State("edit-ticker", "data"),
+    prevent_initial_call=True,
+)
+def delete_holding(clicks, ticker):
+    if not clicks or not ticker:
+        return (dash.no_update,) * 3
+    try:
+        message = correct_holding(ticker, delete=True)
+    except (ValueError, sqlite3.Error) as exc:
+        return (
+            html.P(f"Not deleted: {exc}", style={"color": theme.NEGATIVE}),
+            dash.no_update,
+            dash.no_update,
+        )
+    return (
+        html.P(message, style={"color": theme.POSITIVE}),
+        datetime.now(timezone.utc).isoformat(),
+        HIDDEN,
+    )
+
+
+@dash.callback(
+    Output("edit-card", "style", allow_duplicate=True),
+    Input("edit-cancel", "n_clicks"),
+    prevent_initial_call=True,
+)
+def cancel_edit(clicks):
+    return HIDDEN if clicks else dash.no_update

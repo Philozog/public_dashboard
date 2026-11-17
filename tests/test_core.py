@@ -281,3 +281,67 @@ class NewsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CorrectionTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.path = Path(self.tmp.name) / "portfolio.db"
+        database.initialize_database(self.path)
+        ledger.transact(
+            "buy", ticker="KWEB", shares=795, price=25, holding_type="Core", path=self.path
+        )
+
+    def test_correction_fixes_holding_without_creating_a_return(self):
+        message = ledger.correct_holding("kweb", 759, 25, "Moonshot", path=self.path)
+        self.assertIn("759 shares", message)
+        with database.connect(self.path) as conn:
+            row = conn.execute("SELECT * FROM portfolio").fetchone()
+            kinds = [r[0] for r in conn.execute("SELECT kind FROM transactions ORDER BY id")]
+        self.assertEqual(
+            (row["shares"], row["avg_price"], row["holding_type"]), (759, 25, "Moonshot")
+        )
+        self.assertEqual(kinds, ["buy", "correction"])
+        self.assertAlmostEqual(ledger.account_performance(self.path).growth.iloc[-1], 1)
+
+    def test_delete_removes_holding_and_keeps_history(self):
+        self.assertEqual(
+            ledger.correct_holding("KWEB", delete=True, path=self.path), "Deleted KWEB."
+        )
+        with database.connect(self.path) as conn:
+            self.assertIsNone(conn.execute("SELECT * FROM portfolio").fetchone())
+            note = conn.execute("SELECT note FROM transactions WHERE kind='correction'").fetchone()[
+                0
+            ]
+        self.assertIn("795 shares", note)
+        self.assertEqual(ledger.account_summary(self.path)["nav"], 0)
+
+    def test_invalid_correction_changes_nothing(self):
+        for kwargs in [
+            dict(shares=0, avg_price=25, holding_type="Core"),
+            dict(shares=1, avg_price=25, holding_type="X"),
+        ]:
+            with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
+                ledger.correct_holding("KWEB", path=self.path, **kwargs)
+        with self.assertRaises(ValueError):
+            ledger.correct_holding("NOPE", 1, 1, "Core", path=self.path)
+        self.assertEqual(len(ledger.transaction_history(self.path)), 1)
+
+    def test_version_2_database_is_upgraded_and_keeps_rows(self):
+        old = Path(self.tmp.name) / "v2.db"
+        database.initialize_database(old)
+        ledger.transact("buy", ticker="A", shares=1, price=10, holding_type="Core", path=old)
+        with sqlite3.connect(old, factory=database.ManagedConnection) as conn:
+            sql = conn.execute(
+                "SELECT sql FROM sqlite_master WHERE name='transactions'"
+            ).fetchone()[0]
+            conn.execute("ALTER TABLE transactions RENAME TO t_old")
+            conn.execute(sql.replace(",'correction'", ""))
+            conn.execute("INSERT INTO transactions SELECT * FROM t_old")
+            conn.execute("DROP TABLE t_old")
+            conn.execute("PRAGMA user_version=2")
+        database._ready.clear()
+        database.initialize_database(old)
+        ledger.correct_holding("A", 2, 10, "Core", path=old)
+        self.assertEqual(len(ledger.transaction_history(old)), 2)
