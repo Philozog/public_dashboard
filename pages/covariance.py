@@ -17,24 +17,36 @@ layout = html.Div(
     [
         dcc.Location(id="cov_location"),
         html.H2("Correlations", className="page-title"),
-        html.Div(
-            [
-                _metric_card(label, key)
-                for label, key in [
-                    ("Portfolio annualized volatility", "covariance-metric-portfolio-vol"),
-                    ("Benchmark volatility", "covariance-metric-spy-vol"),
-                    ("Diversification ratio", "covariance-metric-div-ratio"),
+        # Spinner while the price history loads.
+        dcc.Loading(
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            _metric_card(label, key)
+                            for label, key in [
+                                (
+                                    "Portfolio annualized volatility",
+                                    "covariance-metric-portfolio-vol",
+                                ),
+                                ("Benchmark volatility", "covariance-metric-spy-vol"),
+                                ("Diversification ratio", "covariance-metric-div-ratio"),
+                            ]
+                        ],
+                        className="summary-grid",
+                    ),
+                    html.Div(id="covariance-status", className="data-status"),
+                    dcc.Graph(id="covariance-heatmap", figure=blank_figure()),
+                    html.Div(id="covariance-insights", className="panel"),
+                    dcc.Graph(id="risk-contribution-chart", figure=blank_figure()),
+                    html.P(
+                        "Risk contribution is each holding's share of modeled portfolio variance, using current invested weights. "
+                        "A negative contribution can indicate a diversifying position. Cash is excluded."
+                    ),
                 ]
-            ],
-            className="summary-grid",
-        ),
-        html.Div(id="covariance-status", className="data-status"),
-        dcc.Graph(id="covariance-heatmap", figure=blank_figure()),
-        html.Div(id="covariance-insights", className="panel"),
-        dcc.Graph(id="risk-contribution-chart", figure=blank_figure()),
-        html.P(
-            "Risk contribution is each holding's share of modeled portfolio variance, using current invested weights. "
-            "A negative contribution can indicate a diversifying position. Cash is excluded."
+            ),
+            type="circle",
+            delay_show=200,
         ),
     ]
 )

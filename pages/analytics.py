@@ -22,27 +22,36 @@ layout = html.Div(
     [
         dcc.Location(id="analytics_location"),
         html.H2("Analytics", className="page-title"),
-        html.Div(
-            [
-                _metric_card(label, key)
-                for label, key in [
-                    ("Sharpe Ratio", "sharpe"),
-                    ("Sortino Ratio", "sortino"),
-                    ("Beta", "beta"),
-                    ("Alpha (annualized)", "alpha"),
-                    ("Current allocation return", "ttwr"),
-                    ("Max Drawdown", "max_drawdown"),
+        # Spinner while the price history loads.
+        dcc.Loading(
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            _metric_card(label, key)
+                            for label, key in [
+                                ("Sharpe Ratio", "sharpe"),
+                                ("Sortino Ratio", "sortino"),
+                                ("Beta", "beta"),
+                                ("Alpha (annualized)", "alpha"),
+                                ("Current allocation return", "ttwr"),
+                                ("Max Drawdown", "max_drawdown"),
+                            ]
+                        ],
+                        className="summary-grid",
+                    ),
+                    html.P(
+                        "Historical model of today's invested holdings, rebalanced daily; cash is excluded. "
+                        "Returns use adjusted prices and matching dates."
+                    ),
+                    html.Div(id="analytics-status", className="data-status"),
+                    dcc.Graph(id="performance_chart", figure=blank_figure()),
+                    dcc.Graph(id="drawdown_chart", figure=blank_figure()),
                 ]
-            ],
-            className="summary-grid",
+            ),
+            type="circle",
+            delay_show=200,
         ),
-        html.P(
-            "Historical model of today's invested holdings, rebalanced daily; cash is excluded. "
-            "Returns use adjusted prices and matching dates."
-        ),
-        html.Div(id="analytics-status", className="data-status"),
-        dcc.Graph(id="performance_chart", figure=blank_figure()),
-        dcc.Graph(id="drawdown_chart", figure=blank_figure()),
     ]
 )
 
