@@ -4,7 +4,7 @@ import dash
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-from dash import Input, Output, dcc, html
+from dash import Input, Output, State, dcc, html
 
 from Services import theme
 from Services.components import metric_card as _metric_card
@@ -240,7 +240,6 @@ def _build_explanation(
 
 layout = html.Div(
     [
-        dcc.Location(id="mc-location"),
         html.H2("Portfolio Monte Carlo Simulation", className="subtitle"),
         html.Div(
             [
@@ -277,25 +276,42 @@ layout = html.Div(
                     ],
                     style={"minWidth": "180px", "flex": "1"},
                 ),
+                html.Button("Run simulation", id="mc-run-btn", n_clicks=0, className="mc-run"),
             ],
-            style={"display": "flex", "gap": "12px", "flexWrap": "wrap", "marginBottom": "12px"},
+            className="mc-controls",
         ),
         html.Div(
-            [
-                _metric_card("Modeled holdings value", "mc-current-value"),
-                _metric_card("Median Ending Value", "mc-median-value"),
-                _metric_card("5th Percentile", "mc-downside-value"),
-                _metric_card("95th Percentile", "mc-upside-value"),
-                _metric_card("Chance of Loss", "mc-loss-probability"),
-                _metric_card("Median CAGR", "mc-cagr"),
-            ],
-            style={"display": "flex", "gap": "12px", "flexWrap": "wrap", "marginBottom": "12px"},
+            "Choose a time horizon and how many simulations to run, then press Run simulation.",
+            id="mc-status",
+            className="mc-status",
         ),
-        html.Div(id="mc-status", style={"marginBottom": "12px"}),
-        dcc.Graph(id="mc-projection-chart", figure=blank_figure()),
-        dcc.Graph(id="mc-distribution-chart", figure=blank_figure()),
-        html.Div(id="mc-explanation"),
-        dcc.Store(id="mc-price-cache"),
+        dcc.Loading(
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            _metric_card("Modeled holdings value", "mc-current-value"),
+                            _metric_card("Median Ending Value", "mc-median-value"),
+                            _metric_card("5th Percentile", "mc-downside-value"),
+                            _metric_card("95th Percentile", "mc-upside-value"),
+                            _metric_card("Chance of Loss", "mc-loss-probability"),
+                            _metric_card("Median CAGR", "mc-cagr"),
+                        ],
+                        style={
+                            "display": "flex",
+                            "gap": "12px",
+                            "flexWrap": "wrap",
+                            "marginBottom": "12px",
+                        },
+                    ),
+                    dcc.Graph(id="mc-projection-chart", figure=blank_figure()),
+                    dcc.Graph(id="mc-distribution-chart", figure=blank_figure()),
+                    html.Div(id="mc-explanation"),
+                ]
+            ),
+            type="circle",
+            delay_show=150,
+        ),
     ]
 )
 
@@ -303,12 +319,7 @@ layout = html.Div(
 if not hasattr(dash, "_monte_carlo_callback_registered"):
     dash._monte_carlo_callback_registered = True
 
-    @dash.callback(
-        Output("mc-price-cache", "data"),
-        Input("mc-location", "pathname"),
-        Input("analysis-period", "value"),
-    )
-    def fetch_prices(_pathname, period="1y"):
+    def fetch_prices(period="1y"):
         holdings = _load_holdings()
         if holdings.empty:
             return {"error": "No holdings found. Add positions on the Portfolio page first."}
@@ -363,11 +374,15 @@ if not hasattr(dash, "_monte_carlo_callback_registered"):
         Output("mc-loss-probability", "children"),
         Output("mc-cagr", "children"),
         Output("mc-explanation", "children"),
-        Input("mc-price-cache", "data"),
-        Input("mc-years", "value"),
-        Input("mc-simulations", "value"),
+        Input("mc-run-btn", "n_clicks"),
+        State("mc-years", "value"),
+        State("mc-simulations", "value"),
+        State("analysis-period", "value"),
+        prevent_initial_call=True,
     )
-    def update_monte_carlo(cache, years, simulations):
+    def update_monte_carlo(_clicks, years, simulations, period):
+        """Runs only when the Run simulation button is pressed."""
+        cache = fetch_prices(period or "1y")
         empty_projection = _empty_figure(
             "Projected Portfolio Value Paths", "No simulation data available."
         )
@@ -375,9 +390,6 @@ if not hasattr(dash, "_monte_carlo_callback_registered"):
             "Distribution of Ending Portfolio Values", "No simulation data available."
         )
         blank = ("--",) * 6
-
-        if cache is None:
-            return ("Loading...", empty_projection, empty_distribution, *blank, html.Div())
 
         error = cache.get("error")
         if error:
@@ -404,6 +416,8 @@ if not hasattr(dash, "_monte_carlo_callback_registered"):
 
         n = len(cache["valid_tickers"])
         status_parts = [
+            f"Simulated {int(simulations or DEFAULT_SIMULATIONS):,} paths over "
+            f"{int(years or DEFAULT_YEARS)} year{'s' if int(years or DEFAULT_YEARS) != 1 else ''}.",
             f"Using {n} of {cache['total_tickers']} holdings."
             f" Observations per ticker: {cache['min_obs']}–{cache['max_obs']} trading days.",
             cache["coverage"],

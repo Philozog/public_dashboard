@@ -97,6 +97,7 @@ def main():
                 expect(page.locator(".nav-link.active")).to_have_attribute("href", "/covariance")
                 expect(page.locator("#scenario-results")).to_have_count(0)
                 page.goto(base + "/monte-carlo")
+                page.locator("#mc-run-btn").click()
                 expect(page.locator("#mc-status")).to_contain_text(
                     "value coverage: 100.0%", timeout=60000
                 )
