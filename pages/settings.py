@@ -17,16 +17,16 @@ dash.register_page(
 def layout():
     settings = get_settings()
     fields = [
-        ("Core target (%)", "target-core", settings["targets"]["Core"]),
-        ("High Conviction target (%)", "target-conviction", settings["targets"]["High Conviction"]),
-        ("Moonshot target (%)", "target-moonshot", settings["targets"]["Moonshot"]),
+        ("Core (%)", "target-core", settings["targets"]["Core"]),
+        ("High Conviction (%)", "target-conviction", settings["targets"]["High Conviction"]),
+        ("Moonshot (%)", "target-moonshot", settings["targets"]["Moonshot"]),
         ("Single holding limit (%)", "concentration-limit", settings["concentration"]),
         (
-            "Allocation drift tolerance (percentage points)",
+            "Drift tolerance (pts)",
             "drift-tolerance",
             settings["drift_tolerance"],
         ),
-        ("Annual risk-free assumption (%)", "risk-free", settings["risk_free"] * 100),
+        ("Risk-free rate (%)", "risk-free", settings["risk_free"] * 100),
     ]
     return html.Div(
         [

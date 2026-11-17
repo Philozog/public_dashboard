@@ -1537,3 +1537,15 @@ details > summary { cursor: pointer; padding: 8px 0; font-weight: 700; }
 }
 .mc-run { height: 40px; padding: 0 22px; }
 .mc-status { margin-bottom: 12px; color: var(--muted); }
+
+/* Parameters: compact fields on one aligned row */
+.settings-grid {
+    grid-template-columns: repeat(auto-fill, 170px);
+    align-items: end;
+    gap: 14px;
+}
+.settings-grid label { display: block; margin-bottom: 6px; color: var(--muted); font-size: 13px; font-weight: 600; white-space: nowrap; }
+.settings-grid input, .settings-grid .dash-input-container { width: 100%; }
+@media (max-width: 640px) {
+    .settings-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
