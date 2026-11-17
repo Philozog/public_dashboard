@@ -6,10 +6,17 @@ from dash import Input, Output, dcc, html
 
 from Services import accounts
 from Services.helper import load_data
-from Services.home_summary import BENCHMARK, alerts, glance, time_ago
+from Services.home_summary import (
+    BENCHMARK,
+    MARKET_INDEXES,
+    alerts,
+    glance,
+    market_snapshot,
+    time_ago,
+)
 from Services.insights import prepare_holdings
 from Services.market import get_historical_prices
-from Services.news import NewsFetchError, fetch_portfolio_news
+from Services.news import NewsFetchError, fetch_market_news, fetch_portfolio_news
 from Services.sentiment import score_articles
 
 dash.register_page(__name__, path="/", name="Home", title="Apothicaire", order=0)
@@ -55,6 +62,7 @@ def layout(**_kwargs):
                     ),
                 ],
                 className="home-panels",
+                id="home-panels",
             ),
         ],
         className="home",
@@ -204,29 +212,160 @@ def _glance_cards(data):
     )
 
 
-def _empty_state():
+def _index_level(row):
+    if row["kind"] == "yield":
+        return f"{row['last']:.2f}%"
+    if row["kind"] == "level":
+        return f"{row['last']:.1f}"
+    return f"{row['last']:,.2f}"
+
+
+def _index_change(row):
+    change = row["change"]
+    css = "home-pos" if change >= 0 else "home-neg"
+    if row["kind"] == "yield":  # quoted in percent, so 0.01 = 1 basis point
+        text = f"{change * 100:+.0f} bp"
+    elif row["kind"] == "level":
+        text = f"{change:+.1f} pts"
+    else:
+        text = f"{row['pct']:+.2%} ({change:+,.0f})"
+    return [html.Span(text, className=css), f" on {row['date']:%a %d %b}"]
+
+
+def _market_cards(rows):
+    cards = []
+    for row in rows:
+        details = [_index_change(row)]
+        extra = None
+        if row["symbol"] == "^GSPC":
+            if row["ytd_pct"] is not None:
+                details.append(["This year: ", _signed_pct(row["ytd_pct"])])
+            if len(row["spark"]) >= 2:
+                extra = html.Div(
+                    [_sparkline(row["spark"]), html.Div("Last 3 months", className="home-note")]
+                )
+        cards.append(_card(row["name"], _index_level(row), *details, extra=extra))
+    return (
+        html.Div(cards, className="home-cards")
+        if cards
+        else html.P("Market data is unavailable right now.", className="muted")
+    )
+
+
+def _market_headlines():
+    try:
+        articles = fetch_market_news(max_items=5)
+    except NewsFetchError as exc:
+        message = str(exc)
+        if "NEWS_API_KEY" in message:
+            message = "Add a NewsAPI key to see today's headlines (see README)."
+        return html.Div(html.P(message, className="muted"), className="card")
+    if not articles:
+        return html.Div(
+            html.P("No market headlines yet today.", className="muted"), className="card"
+        )
+    now = datetime.now(timezone.utc)
+    scored = score_articles(articles)
+    main, rest = scored[0], scored[1:]
+    label = main["sentiment"]["label"]
+    lead = html.Div(
+        [
+            html.Div("Main headline of the day", className="metric-title"),
+            html.A(
+                main["title"],
+                href=main["url"],
+                target="_blank",
+                rel="noopener noreferrer",
+                className="home-lead-title",
+            ),
+            html.P(main["description"], className="home-lead-text")
+            if main["description"]
+            else None,
+            html.Div(
+                [
+                    html.Span(label.title(), className=f"home-tone home-tone-{label}"),
+                    html.Span(
+                        f"{main['source']} · {time_ago(main['published_at'], now)}",
+                        className="home-note",
+                    ),
+                ],
+                className="home-lead-meta",
+            ),
+        ],
+        className="card home-lead",
+    )
+    others = (
+        html.Div(
+            [
+                html.H3("Also today", className="card-title"),
+                html.Ul(
+                    [
+                        html.Li(
+                            [
+                                html.Span(
+                                    a["sentiment"]["label"].title(),
+                                    className=f"home-tone home-tone-{a['sentiment']['label']}",
+                                ),
+                                html.Div(
+                                    [
+                                        html.A(
+                                            a["title"],
+                                            href=a["url"],
+                                            target="_blank",
+                                            rel="noopener noreferrer",
+                                        ),
+                                        html.Div(
+                                            f"{a['source']} · {time_ago(a['published_at'], now)}",
+                                            className="home-note",
+                                        ),
+                                    ]
+                                ),
+                            ],
+                            className="home-headline",
+                        )
+                        for a in rest
+                    ],
+                    className="home-headlines",
+                ),
+            ],
+            className="card home-panel",
+        )
+        if rest
+        else None
+    )
+    return html.Div([lead, others], className="home-panels home-market-news")
+
+
+def _market_view():
+    """What someone with no holdings sees: today's market and the day's main headlines."""
+    prices = get_historical_prices([symbol for symbol, _, _ in MARKET_INDEXES], period="1y")
     return html.Div(
         [
-            html.H3("Your portfolio is empty", className="card-title"),
-            html.P("Add your first holding to see your value, today's movers and alerts here."),
-            dcc.Link("Add a holding →", href="/portfolio", className="button-link"),
-        ],
-        className="card home-empty",
+            html.Div(
+                [
+                    html.Span("You haven't added any holdings yet, so here is today's market. "),
+                    dcc.Link("Add your first holding →", href="/portfolio", className="home-more"),
+                ],
+                className="home-intro",
+            ),
+            _market_cards(market_snapshot(prices)),
+            _market_headlines(),
+        ]
     )
 
 
 @dash.callback(
     Output("home-glance", "children"),
     Output("home-alerts", "children"),
+    Output("home-panels", "style"),
     Input("home-name", "data"),
 )
 def _load_summary(_name):
     raw = load_data()
     holdings = prepare_holdings(raw)
     if holdings.empty:
-        return _empty_state(), html.P(
-            "Nothing yet. Alerts appear once you add holdings.", className="muted"
-        )
+        # Nothing of their own to show yet: show the day's market instead.
+        return _market_view(), None, {"display": "none"}
     prices = get_historical_prices(list(holdings["ticker"]) + [BENCHMARK], period="1y")
     data = glance(holdings, prices, raw_holdings=raw)
     items = alerts(holdings, raw, data["movers"])
@@ -237,14 +376,14 @@ def _load_summary(_name):
             [html.Li(text, className=f"home-alert home-alert-{level}") for level, text in items],
             className="home-alert-list",
         )
-    return _glance_cards(data), alert_view
+    return _glance_cards(data), alert_view, None
 
 
 @dash.callback(Output("home-news", "children"), Input("home-name", "data"))
 def _load_news(_name):
     holdings = prepare_holdings(load_data())
     if holdings.empty:
-        return html.P("Headlines about your holdings appear here.", className="muted")
+        return None  # the market view shows the day's headlines instead
     tickers = list(holdings["ticker"])
     try:
         articles = fetch_portfolio_news(tickers, per_ticker=1, max_items=3)

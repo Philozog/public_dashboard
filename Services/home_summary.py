@@ -143,3 +143,40 @@ def time_ago(stamp, now=None):
     if minutes < 48 * 60:
         return f"{minutes // 60} h ago"
     return f"{minutes // 1440} days ago"
+
+
+# Market snapshot for people who have not added holdings yet.
+MARKET_INDEXES = [
+    ("^GSPC", "S&P 500", "index"),
+    ("^IXIC", "Nasdaq", "index"),
+    ("^DJI", "Dow Jones", "index"),
+    ("^TNX", "10-year Treasury yield", "yield"),
+    ("^VIX", "VIX (volatility)", "level"),
+]
+
+
+def market_snapshot(prices):
+    """One row per index with its latest level and change; missing ones are skipped."""
+    rows = []
+    for symbol, name, kind in MARKET_INDEXES:
+        if symbol not in prices.columns:
+            continue
+        series = prices[symbol].dropna()
+        if len(series) < 2:
+            continue
+        last, prev = float(series.iloc[-1]), float(series.iloc[-2])
+        this_year = series[series.index.year == series.index[-1].year]
+        rows.append(
+            {
+                "symbol": symbol,
+                "name": name,
+                "kind": kind,
+                "last": last,
+                "change": last - prev,
+                "pct": _pct(last, prev),
+                "ytd_pct": _pct(last, this_year.iloc[0]) if len(this_year) >= 2 else None,
+                "date": series.index[-1],
+                "spark": series[series.index >= series.index[-1] - pd.Timedelta(days=92)],
+            }
+        )
+    return rows
