@@ -30,24 +30,31 @@ def _open(path):
     return sqlite3.connect(path, timeout=30, factory=ManagedConnection)
 
 
+def current_path():
+    """The signed-in person's portfolio on a hosted copy, else the default file."""
+    from Services.accounts import database_path_for_request  # avoids an import cycle
+
+    return database_path_for_request() or DB_PATH
+
+
 def utc_now():
     return datetime.now(timezone.utc).isoformat()
 
 
 def backup_database(path=None):
-    path = Path(path or DB_PATH)
+    path = Path(path or current_path())
     if not path.exists():
         return None
     folder = path.parent / "backups"
     folder.mkdir(parents=True, exist_ok=True)
-    target = folder / f"portfolio-{datetime.now(timezone.utc):%Y%m%dT%H%M%S%fZ}.db"
+    target = folder / f"{path.stem}-{datetime.now(timezone.utc):%Y%m%dT%H%M%S%fZ}.db"
     with _open(path) as source, _open(target) as destination:
         source.backup(destination)
     return target
 
 
 def initialize_database(path=None):
-    path = Path(path or DB_PATH)
+    path = Path(path or current_path())
     key = str(path.resolve())
     with _lock:
         if key in _ready and path.exists():
