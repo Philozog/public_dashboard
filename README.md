@@ -95,7 +95,8 @@ portfolio**. Nobody can see anyone else's holdings.
 
    - Put **yourself first**: the first name keeps the portfolio that's
      already on the site.
-   - Names use lowercase letters, numbers, `-` or `_`. Passwords need at
+   - Each name is one lowercase word (letters, numbers, `-` or `_`, no spaces),
+     like `maria`; that is what the person types to sign in. Passwords need at
      least 8 characters and can't contain a comma.
 3. Click **Save Changes**. The site restarts in about a minute.
 4. Send each person the link plus their own name and password, privately.

@@ -16,6 +16,13 @@ class ParseUsersTests(unittest.TestCase):
         self.assertEqual(list(users), ["anna", "ben"])
         self.assertEqual(users["ben"], "pass:with:colons")
 
+    def test_spaces_around_password_are_ignored(self):
+        self.assertEqual(accounts.parse_users("maria: secret-pass ")["maria"], "secret-pass")
+
+    def test_full_names_with_spaces_are_rejected_with_a_clear_reason(self):
+        with self.assertRaisesRegex(ValueError, "no spaces"):
+            accounts.parse_users("Maria Smith:secret-pass")
+
     def test_rejects_bad_entries(self):
         for raw in ["anna", "an na:longpassword", "anna:short", "a:longpass1,a:longpass2"]:
             with self.subTest(raw=raw), self.assertRaises(ValueError):
@@ -49,3 +56,33 @@ class SignInTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertTrue((Path(folder) / "users" / "ben.db").exists())
+
+    def test_mistake_in_user_list_keeps_site_up_but_locked(self):
+        with tempfile.TemporaryDirectory() as folder:
+            env = {
+                **os.environ,
+                "APOTHICAIRE_DB": str(Path(folder) / "portfolio.db"),
+                "DASHBOARD_USERS": "anna:short",
+                "DASHBOARD_PASSWORD": "old-shared-password",
+                "PYTHONDONTWRITEBYTECODE": "1",
+            }
+            code = (
+                "import app\n"
+                "c = app.server.test_client()\n"
+                "assert c.get('/healthz').status_code == 200\n"
+                "r = c.get('/login')\n"
+                "assert r.status_code == 503 and b'account list has a mistake' in r.data\n"
+                "r = c.post('/login', data={'name': 'x', 'password': 'old-shared-password'})\n"
+                "assert r.status_code == 503\n"
+                "assert c.get('/portfolio').status_code == 302\n"
+            )
+            result = subprocess.run(
+                [sys.executable, "-B", "-c", code],
+                cwd=Path(__file__).resolve().parents[1],
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("at least 8 characters", result.stderr)

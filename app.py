@@ -7,6 +7,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+import logging  # noqa: E402
+
+# Show warnings and errors (such as account-setup mistakes) in the host's logs.
+logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
+
 from Services import accounts
 from Services.database import get_engine
 from Services.theme import register_template

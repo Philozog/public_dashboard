@@ -15,6 +15,7 @@ your own computer) nobody is asked to sign in.
 
 import hmac
 import html
+import logging
 import os
 import re
 import secrets
@@ -27,6 +28,11 @@ from flask import Response, g, redirect, request, session
 
 from Services.database import DB_PATH
 
+LOG = logging.getLogger(__name__)
+SETUP_ERROR_MESSAGE = (
+    "Sign-in is paused: the site's account list has a mistake. "
+    "The site owner can see the reason in the hosting logs."
+)
 NAME = re.compile(r"[a-z0-9_-]{1,32}")
 MAX_FAILURES = 5
 LOCKOUT_SECONDS = 15 * 60
@@ -43,10 +49,11 @@ def parse_users(raw):
             continue
         name, sep, password = entry.partition(":")
         name = name.strip().lower()
+        password = password.strip()  # "max: secret" means the password "secret"
         if not sep or not NAME.fullmatch(name):
             raise ValueError(
                 f"DASHBOARD_USERS entry {name or entry[:12]!r} must look like name:password; "
-                "names use only a-z, 0-9, - and _."
+                "names are one word using only a-z, 0-9, - and _ (no spaces)."
             )
         if len(password) < 8:
             raise ValueError(f"Password for {name!r} must be at least 8 characters.")
@@ -146,9 +153,17 @@ def _safe_next(value):
 
 def install(server):
     """Add sign-in to the Flask server when the host configures accounts."""
-    users = parse_users(os.environ.get("DASHBOARD_USERS", ""))
+    raw_users = os.environ.get("DASHBOARD_USERS", "")
     shared_password = os.environ.get("DASHBOARD_PASSWORD", "")
-    enabled = bool(users or shared_password)
+    setup_error = ""
+    try:
+        users = parse_users(raw_users)
+    except ValueError as exc:
+        # Keep the site up but let nobody in until the list is fixed.
+        setup_error = str(exc)
+        LOG.error("Sign-in is disabled until DASHBOARD_USERS is fixed: %s", setup_error)
+        users, shared_password = {}, ""
+    enabled = bool(raw_users.strip() or users or shared_password)
     server.config["ACCOUNTS_ENABLED"] = enabled
     if not enabled:
         return
@@ -163,6 +178,8 @@ def install(server):
 
     @server.route("/login", methods=["GET", "POST"])
     def _login():
+        if setup_error:
+            return _login_page(SETUP_ERROR_MESSAGE, status=503)
         if request.method == "GET":
             return _login_page(next_path=_safe_next(request.args.get("next", "/")))
         client = _client()
@@ -191,7 +208,7 @@ def install(server):
         if request.path in ("/healthz", "/login", "/logout"):
             return None
         name = session.get("user")
-        if name and (name in users or (not users and shared_password)):
+        if name and not setup_error and (name in users or (not users and shared_password)):
             g.user = name
             g.db_path = str(database_for(name, users))
             return None
