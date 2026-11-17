@@ -40,7 +40,7 @@ def layout(**_kwargs):
                 [
                     html.Div(
                         [
-                            html.H3("Needs your attention", className="card-title"),
+                            html.H3("Main points of the day", className="card-title"),
                             dcc.Loading(html.Div(id="home-alerts"), type="dot"),
                         ],
                         className="card home-panel",
@@ -136,80 +136,74 @@ def _card(title, main, *details, extra=None):
 
 
 def _glance_cards(data):
+    """Only cards (and lines) with real data are shown; nothing says "unavailable"."""
+    cards = []
+
     day = data["day_change"]
-    value_line = (
-        [
-            "Latest day: ",
-            html.Span(
-                f"{'+' if day >= 0 else '−'}${abs(day):,.0f}",
-                className="home-pos" if day >= 0 else "home-neg",
-            ),
-            " (",
-            _signed_pct(data["day_pct"]),
-            ")",
-        ]
-        if day is not None
-        else "Latest-day change unavailable"
-    )
+    value_lines = []
+    if day is not None:
+        value_lines.append(
+            [
+                "Latest day: ",
+                html.Span(
+                    f"{'+' if day >= 0 else '−'}${abs(day):,.0f}",
+                    className="home-pos" if day >= 0 else "home-neg",
+                ),
+                " (",
+                _signed_pct(data["day_pct"]),
+                ")",
+            ]
+        )
     spark = _sparkline(data["spark"]) if len(data["spark"]) >= 2 else None
+    cards.append(
+        _card(
+            "Portfolio value",
+            f"${data['value']:,.2f}",
+            *value_lines,
+            extra=html.Div(
+                [spark, html.Div("Today's holdings, last 6 months", className="home-note")]
+            )
+            if spark is not None
+            else None,
+        )
+    )
 
     you, spy = data["day_pct"], data["spy_day_pct"]
-    if you is None or spy is None:
-        verdict = "Comparison unavailable"
-    elif you >= spy:
-        verdict = "Ahead of the S&P 500"
-    else:
-        verdict = "Behind the S&P 500"
-
-    movers = data["movers"]
-    if movers:
-        best = movers[0]
-        mover_lines = [["Best: ", html.B(best[0]), " ", _signed_pct(best[1])]]
-        if len(movers) > 1:
-            worst = movers[-1]
-            mover_lines.append(["Worst: ", html.B(worst[0]), " ", _signed_pct(worst[1])])
-        mover_main = html.Span(best[0])
-    else:
-        mover_main, mover_lines = "—", ["Price history unavailable"]
-
-    updated = data["updated"]
-    return html.Div(
-        [
-            _card(
-                "Portfolio value",
-                f"${data['value']:,.2f}",
-                value_line,
-                extra=html.Div(
-                    [spark, html.Div("Today's holdings, last 6 months", className="home-note")]
-                )
-                if spark is not None
-                else None,
-            ),
-            _card(
-                f"You vs the S&P 500 ({BENCHMARK})",
-                verdict,
-                ["Latest day: you ", _signed_pct(you), " · S&P ", _signed_pct(spy)],
+    if you is not None and spy is not None:
+        lines = [["Latest day: you ", _signed_pct(you), " · S&P ", _signed_pct(spy)]]
+        if data["ytd_pct"] is not None and data["spy_ytd_pct"] is not None:
+            lines.append(
                 [
                     "This year: you ",
                     _signed_pct(data["ytd_pct"]),
                     " · S&P ",
                     _signed_pct(data["spy_ytd_pct"]),
-                ],
-                html.Span("Based on today's holdings at past prices.", className="home-note"),
-            ),
-            _card("Biggest movers, latest day", mover_main, *mover_lines),
+                ]
+            )
+        lines.append(html.Span("Based on today's holdings at past prices.", className="home-note"))
+        verdict = "Ahead of the S&P 500" if you >= spy else "Behind the S&P 500"
+        cards.append(_card(f"You vs the S&P 500 ({BENCHMARK})", verdict, *lines))
+
+    movers = data["movers"]
+    if movers:
+        best = movers[0]
+        lines = [["Best: ", html.B(best[0]), " ", _signed_pct(best[1])]]
+        if len(movers) > 1:
+            worst = movers[-1]
+            lines.append(["Worst: ", html.B(worst[0]), " ", _signed_pct(worst[1])])
+        cards.append(_card("Biggest movers, latest day", best[0], *lines))
+
+    updated = data["updated"]
+    if updated is not None:
+        cards.append(
             _card(
                 "Prices last updated",
-                time_ago(
-                    updated.to_pydatetime() if updated is not None else None,
-                    datetime.now(timezone.utc),
-                ),
-                updated.strftime("%d %b, %H:%M UTC") if updated is not None else "No price yet",
+                time_ago(updated.to_pydatetime(), datetime.now(timezone.utc)),
+                updated.strftime("%d %b, %H:%M UTC"),
                 dcc.Link("Refresh on Portfolio →", href="/portfolio", className="home-more"),
-            ),
-        ],
-        className="home-cards",
-    )
+            )
+        )
+    return html.Div(cards, className="home-cards")
 
 
 def _index_level(row):
@@ -370,7 +364,7 @@ def _load_summary(_name):
     data = glance(holdings, prices, raw_holdings=raw)
     items = alerts(holdings, raw, data["movers"])
     if not items:
-        alert_view = html.P("All clear. Nothing needs your attention.", className="home-clear")
+        alert_view = html.P("Nothing stands out today.", className="home-clear")
     else:
         alert_view = html.Ul(
             [html.Li(text, className=f"home-alert home-alert-{level}") for level, text in items],
