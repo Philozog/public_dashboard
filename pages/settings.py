@@ -4,7 +4,14 @@ from dash import Input, Output, State, dcc, html, no_update
 from Services.database import backup_database, utc_now
 from Services.settings import get_settings, save_settings
 
-dash.register_page(__name__, path="/settings", name="Settings", title="Settings", order=7)
+dash.register_page(
+    __name__,
+    path="/parameters",
+    name="Parameters",
+    title="Parameters",
+    order=7,
+    redirect_from=["/settings"],
+)
 
 
 def layout():
@@ -23,9 +30,9 @@ def layout():
     ]
     return html.Div(
         [
-            html.H2("Risk settings", className="page-title"),
+            html.H2("Risk parameters", className="page-title"),
             html.P(
-                "Targets must total 100%. These settings apply to analytics, allocation and concentration checks."
+                "Targets must total 100%. These parameters apply to analytics, allocation and concentration checks."
             ),
             html.Div(
                 [
@@ -41,11 +48,11 @@ def layout():
                 ],
                 className="settings-grid",
             ),
-            html.Button("Save risk settings", id="save-risk-settings", n_clicks=0),
+            html.Button("Save parameters", id="save-risk-settings", n_clicks=0),
             html.Div(id="settings-status", role="status"),
             html.H3("Data backups"),
             html.P(
-                "Backups contain your holdings, transactions and settings. Keep a separate copy outside this machine."
+                "Backups contain your holdings, transactions and parameters. Keep a separate copy outside this machine."
             ),
             html.Button("Create database backup", id="backup-btn", n_clicks=0),
             html.Div(id="backup-status", role="status"),
@@ -76,7 +83,7 @@ def save(_clicks, core, conviction, moonshot, concentration, tolerance, rf):
         )
     except (ValueError, TypeError) as exc:
         return f"Not saved: {exc}", no_update
-    return "Risk settings saved.", utc_now()
+    return "Parameters saved.", utc_now()
 
 
 @dash.callback(

@@ -1384,3 +1384,21 @@ details > summary { cursor: pointer; padding: 8px 0; font-weight: 700; }
 .logout-link { color: inherit; opacity: 0.8; }
 .logout-link:hover { opacity: 1; }
 .app-header.is-cover .account-bar { display: none; }
+
+/* Disclosures page and its menu button, set apart from the others */
+.nav-divider {
+    width: 1px;
+    align-self: stretch;
+    margin: 6px 8px;
+    background: var(--border);
+}
+.nav-link-apart { font-weight: 500; }
+.disclosures {
+    font-size: 14px;
+    line-height: 1.7;
+}
+.disclosures p { margin: 0 0 14px; }
+.disclosures p:last-child { margin-bottom: 0; }
+@media (max-width: 640px) {
+    .nav-divider { display: none; }
+}

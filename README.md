@@ -59,7 +59,7 @@ The dashboard starts empty. To add your holdings:
 3. Repeat for each stock. Prices update automatically while the app is running.
 
 Analytics, Correlations and Monte Carlo fill in as soon as you have holdings.
-Adjust allocation targets and the risk-free rate under **Settings**.
+Adjust allocation targets and the risk-free rate under **Parameters**.
 
 ## Put it on a website (optional)
 
@@ -112,7 +112,7 @@ Render, so tell people not to reuse a password from elsewhere.
 - **Update to the latest version:** download the new ZIP and copy your old
   `data` folder (and `.env`) into it, or run `git pull` if you use Git. The
   launcher installs any new packages automatically. Your portfolio is never overwritten by an update.
-- **Back up your portfolio:** use **Settings**, or copy the `data` folder.
+- **Back up your portfolio:** use **Parameters**, or copy the `data` folder.
 - **Error saying the address or port 8050 is already in use:** the dashboard
   is already running in another window. Use that one, or close it first.
 - **Setup failed halfway:** delete the `.venv` folder and double-click the
@@ -122,6 +122,7 @@ Render, so tell people not to reuse a password from elsewhere.
 
 ## Disclaimer
 
+The full disclosures are on the **Disclosures** page of the app.
 For personal education and record-keeping only. Not financial advice.
 Projections and statistics are based on historical data and do not predict
 future results. Market data comes from Yahoo Finance via `yfinance` and may be
@@ -151,7 +152,7 @@ dependencies are installed; see [sentiment setup](docs/sentiment.md).
   bounded memory use; covered holdings and actual history dates are disclosed.
 - **News / News Sentiment:** company-aware headlines and per-result scoring
   provenance, with invested-value coverage.
-- **Settings:** allocation targets, concentration limit, drift tolerance,
+- **Parameters:** allocation targets, concentration limit, drift tolerance,
   risk-free assumption and consistent database backups.
 
 History and benchmark controls are shared across analytical pages. Monte Carlo

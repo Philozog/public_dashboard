@@ -15,12 +15,18 @@ for path in [
     "/monte-carlo",
     "/portfolio-news",
     "/sentiment",
-    "/settings",
+    "/parameters",
+    "/disclosures",
     "/_dash-layout",
     "/_dash-dependencies",
 ]:
     response = client.get(path)
     assert response.status_code == 200, (path, response.status_code, response.data[:500])
+
+# Old bookmarks to the renamed Settings page still work.
+response = client.get("/settings")
+assert response.status_code in (301, 302, 308), response.status_code
+assert response.headers["Location"].endswith("/parameters"), response.headers["Location"]
 
 ids = set()
 

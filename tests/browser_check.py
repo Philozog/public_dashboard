@@ -101,12 +101,12 @@ def main():
                     "value coverage: 100.0%", timeout=60000
                 )
                 expect(page.locator("#mc-current-value")).to_have_text("$2,500")
-                page.goto(base + "/settings")
+                page.goto(base + "/parameters")
                 page.locator("#target-core").fill("50")
                 page.locator("#target-conviction").fill("35")
                 page.locator("#target-moonshot").fill("15")
                 page.locator("#save-risk-settings").click()
-                expect(page.locator("#settings-status")).to_have_text("Risk settings saved.")
+                expect(page.locator("#settings-status")).to_have_text("Parameters saved.")
                 page.locator("#backup-btn").click()
                 expect(page.locator("#backup-status")).to_contain_text("Backup created:")
 
@@ -121,7 +121,7 @@ def main():
                 page.screenshot(path=str(artifacts / "portfolio-mobile.png"), full_page=True)
                 assert not errors, errors
                 print(
-                    "Browser checks passed: desktop/mobile dropdown, rejected oversell, category edit, analytics, correlations, Monte Carlo, settings and backup."
+                    "Browser checks passed: desktop/mobile dropdown, rejected oversell, category edit, analytics, correlations, Monte Carlo, parameters and backup."
                 )
             finally:
                 browser.close()
