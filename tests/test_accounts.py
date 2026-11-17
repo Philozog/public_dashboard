@@ -16,6 +16,13 @@ class ParseUsersTests(unittest.TestCase):
         self.assertEqual(list(users), ["anna", "ben"])
         self.assertEqual(users["ben"], "pass:with:colons")
 
+    def test_spaces_around_password_are_ignored(self):
+        self.assertEqual(accounts.parse_users("maria: secret-pass ")["maria"], "secret-pass")
+
+    def test_full_names_with_spaces_are_rejected_with_a_clear_reason(self):
+        with self.assertRaisesRegex(ValueError, "no spaces"):
+            accounts.parse_users("Maria Smith:secret-pass")
+
     def test_rejects_bad_entries(self):
         for raw in ["anna", "an na:longpassword", "anna:short", "a:longpass1,a:longpass2"]:
             with self.subTest(raw=raw), self.assertRaises(ValueError):

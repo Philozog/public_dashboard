@@ -49,10 +49,11 @@ def parse_users(raw):
             continue
         name, sep, password = entry.partition(":")
         name = name.strip().lower()
+        password = password.strip()  # "max: secret" means the password "secret"
         if not sep or not NAME.fullmatch(name):
             raise ValueError(
                 f"DASHBOARD_USERS entry {name or entry[:12]!r} must look like name:password; "
-                "names use only a-z, 0-9, - and _."
+                "names are one word using only a-z, 0-9, - and _ (no spaces)."
             )
         if len(password) < 8:
             raise ValueError(f"Password for {name!r} must be at least 8 characters.")
