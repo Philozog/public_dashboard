@@ -41,7 +41,6 @@ def main():
         import app
         from Services.ledger import transact
 
-        transact("deposit", amount=10000)
         transact("buy", ticker="AAPL", shares=20, price=100, holding_type="Core")
         transact("buy", ticker="AMD", shares=10, price=50, holding_type="Moonshot")
         server = make_server("127.0.0.1", 0, app.server, threaded=True)
@@ -66,7 +65,7 @@ def main():
             try:
                 page.goto(base + "/portfolio")
                 expect(page.get_by_role("link", name="News", exact=True)).to_have_count(0)
-                expect(page.locator("#summary-cash")).to_have_text("$7,500.00")
+                expect(page.locator("#summary-nav")).to_have_text("$2,500.00")
                 page.locator("#holding-type-input").click()
                 option = page.get_by_role("option", name="High Conviction", exact=True)
                 expect(option).to_be_visible()
@@ -113,7 +112,7 @@ def main():
 
                 page.set_viewport_size({"width": 390, "height": 844})
                 page.goto(base + "/portfolio")
-                expect(page.locator("#summary-nav")).to_have_text("$10,000.00")
+                expect(page.locator("#summary-nav")).to_have_text("$2,500.00")
                 assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth"), (
                     "Mobile page overflows horizontally"
                 )

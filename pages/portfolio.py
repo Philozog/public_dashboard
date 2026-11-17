@@ -219,8 +219,6 @@ layout = html.Div(
                 metric_card(label, "summary-" + key)
                 for label, key in [
                     ("Account value", "nav"),
-                    ("Invested holdings", "holdings"),
-                    ("Cash", "cash"),
                     ("Unrealized P&L", "unrealized"),
                     ("Realized P&L since opening", "realized"),
                 ]
@@ -324,39 +322,9 @@ layout = html.Div(
                     className="toolbar",
                 ),
                 html.P(
-                    "Record the execution price for buys and sells. Record available cash below before buying. Fractional shares are supported."
+                    "Enter the ticker, number of shares and the price you paid (or sold at). Fractional shares are supported."
                 ),
                 html.Div(id="portfolio-action-status", role="status", **{"aria-live": "polite"}),
-            ],
-            className="card portfolio-controls",
-        ),
-        html.Div(
-            [
-                html.H3("Cash movements", className="card-title"),
-                html.P(
-                    "Opening cash is zero until you record your actual cash balance as a deposit. Past transactions are not inferred."
-                ),
-                html.Div(
-                    [
-                        dcc.Dropdown(
-                            id="cash-kind",
-                            options=[
-                                {"label": k.title(), "value": k}
-                                for k in ["deposit", "withdrawal", "dividend", "fee"]
-                            ],
-                            value="deposit",
-                            clearable=False,
-                        ),
-                        dcc.Input(
-                            id="cash-amount", type="number", placeholder="Amount", min=0, step="any"
-                        ),
-                        dcc.Input(
-                            id="cash-note", type="text", placeholder="Note / dividend ticker"
-                        ),
-                        html.Button("Record cash movement", id="cash-btn", n_clicks=0),
-                    ],
-                    className="toolbar",
-                ),
             ],
             className="card portfolio-controls",
         ),
@@ -562,17 +530,13 @@ layout = html.Div(
     Output("holding-type-chart", "figure"),
     Output("portfolio-action-status", "children"),
     Output("portfolio-quote-status", "children"),
-    *[
-        Output("summary-" + k, "children")
-        for k in ("nav", "holdings", "cash", "unrealized", "realized")
-    ],
+    *[Output("summary-" + k, "children") for k in ("nav", "unrealized", "realized")],
     Output("transaction-table", "data"),
     Output("portfolio-target-label", "children"),
     Input("add-btn", "n_clicks"),
     Input("remove-btn", "n_clicks"),
     Input("type-btn", "n_clicks"),
     Input("quote-refresh-btn", "n_clicks"),
-    Input("cash-btn", "n_clicks"),
     Input("interval-component", "n_intervals"),
     Input("settings-version", "data"),
     State("ticker-input", "value"),
@@ -580,16 +544,12 @@ layout = html.Div(
     State("avgprice-input", "value"),
     State("holding-type-input", "value"),
     State("trade-fees", "value"),
-    State("cash-kind", "value"),
-    State("cash-amount", "value"),
-    State("cash-note", "value"),
 )
 def modify_data(
     _add,
     _sell,
     _type,
     _refresh,
-    _cash,
     _interval,
     _settings,
     ticker,
@@ -597,9 +557,6 @@ def modify_data(
     price,
     holding_type,
     fees,
-    cash_kind,
-    cash_amount,
-    cash_note,
 ):
     trigger = dash.ctx.triggered_id
     message = ""
@@ -615,8 +572,6 @@ def modify_data(
             )
         elif trigger == "type-btn":
             message = set_holding_type(ticker, holding_type)
-        elif trigger == "cash-btn":
-            message = transact(cash_kind, amount=cash_amount, note=cash_note)
         elif trigger in ("quote-refresh-btn", "interval-component"):
             message = update_prices(force=trigger == "quote-refresh-btn")
     except (ValueError, sqlite3.Error) as exc:
@@ -648,7 +603,7 @@ def modify_data(
         make_holding_type_chart(chart),
         message,
         status,
-        *[f"${summary[k]:,.2f}" for k in ("nav", "holdings", "cash", "unrealized", "realized")],
+        *[f"${summary[k]:,.2f}" for k in ("nav", "unrealized", "realized")],
         transaction_history().to_dict("records"),
         "Targets: " + " / ".join(f"{k} {v:g}%" for k, v in targets.items()),
     )

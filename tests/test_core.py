@@ -18,9 +18,9 @@ class DatabaseTests(unittest.TestCase):
         database.initialize_database(self.path)
 
     def test_schema_and_idempotency(self):
-        ledger.transact("deposit", amount=100, path=self.path)
+        ledger.transact("buy", ticker="A", shares=1, price=100, holding_type="Core", path=self.path)
         database.initialize_database(self.path)
-        self.assertEqual(ledger.account_summary(self.path)["cash"], 100)
+        self.assertEqual(ledger.account_summary(self.path)["nav"], 100)
         with database.connect(self.path) as conn:
             self.assertEqual(conn.execute("PRAGMA integrity_check").fetchone()[0], "ok")
             conn.executescript((database.BASE_DIR / "schema.sql").read_text())
@@ -37,7 +37,6 @@ class DatabaseTests(unittest.TestCase):
             self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 0)
 
     def test_quotes_use_latest_quantity_and_separate_timestamps(self):
-        ledger.transact("deposit", amount=1000, path=self.path)
         ledger.transact(
             "buy", ticker="AAPL", shares=2, price=100, holding_type="Core", path=self.path
         )
@@ -68,7 +67,6 @@ class DatabaseTests(unittest.TestCase):
             self.assertNotEqual(row["last_updated"], row["quote_updated_at"])
 
     def test_fractional_buy_sell_and_realized_pnl(self):
-        ledger.transact("deposit", amount=1000, path=self.path)
         ledger.transact(
             "buy",
             ticker=" aapl ",
@@ -80,7 +78,7 @@ class DatabaseTests(unittest.TestCase):
         )
         ledger.transact("sell", ticker="AAPL", shares=1, price=120, fees=1, path=self.path)
         summary = ledger.account_summary(self.path)
-        self.assertAlmostEqual(summary["cash"], 864)
+        self.assertAlmostEqual(summary["nav"], 150)
         self.assertAlmostEqual(summary["realized"], 17)
         with database.connect(self.path) as conn:
             row = conn.execute("SELECT * FROM portfolio").fetchone()
@@ -89,7 +87,6 @@ class DatabaseTests(unittest.TestCase):
             self.assertIsNone(row["quote_updated_at"])
 
     def test_invalid_trades_roll_back(self):
-        ledger.transact("deposit", amount=1000, path=self.path)
         ledger.transact(
             "buy", ticker="AAPL", shares=2, price=100, holding_type="Core", path=self.path
         )
@@ -98,29 +95,35 @@ class DatabaseTests(unittest.TestCase):
             dict(kind="buy", ticker="AAPL", shares=-2, price=100, holding_type="Core"),
             dict(kind="buy", ticker="AAPL", shares=1, price=float("nan"), holding_type="Core"),
             dict(kind="buy", ticker="AAPL", shares=1, price=100, holding_type="Unknown"),
-            dict(kind="withdrawal", amount=900),
-            dict(kind="buy", ticker="B", shares=20, price=100, holding_type="Core"),
+            dict(kind="deposit", ticker="AAPL", shares=1, price=100),
         ]:
             with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
                 ledger.transact(**kwargs, path=self.path)
-        self.assertEqual(len(ledger.transaction_history(self.path)), 2)
-        self.assertEqual(ledger.account_summary(self.path)["cash"], 800)
+        self.assertEqual(len(ledger.transaction_history(self.path)), 1)
+        self.assertEqual(ledger.account_summary(self.path)["nav"], 200)
 
-    def test_cash_flows_do_not_create_returns(self):
-        ledger.transact("deposit", amount=100, path=self.path)
-        ledger.transact("deposit", amount=50, path=self.path)
-        ledger.transact("withdrawal", amount=20, path=self.path)
+    def test_buys_without_cash_and_trades_do_not_create_returns(self):
+        ledger.transact("buy", ticker="A", shares=10, price=10, holding_type="Core", path=self.path)
+        ledger.transact("buy", ticker="B", shares=5, price=20, holding_type="Core", path=self.path)
+        self.assertEqual(ledger.account_summary(self.path)["nav"], 200)
         self.assertAlmostEqual(ledger.account_performance(self.path).growth.iloc[-1], 1)
-        ledger.transact("dividend", amount=13, path=self.path)
+        with database.connect(self.path) as conn:
+            conn.execute("UPDATE portfolio SET market_value=market_value*1.1")
+            ledger.record_valuation(conn)
+        self.assertAlmostEqual(ledger.account_performance(self.path).growth.iloc[-1], 1.1)
+        ledger.transact("sell", ticker="A", shares=10, price=11, path=self.path)
         self.assertAlmostEqual(ledger.account_performance(self.path).growth.iloc[-1], 1.1)
 
     def test_fee_reduces_return(self):
-        ledger.transact("deposit", amount=100, path=self.path)
-        ledger.transact("fee", amount=2, path=self.path)
-        self.assertAlmostEqual(ledger.account_performance(self.path).growth.iloc[-1], 0.98)
+        ledger.transact(
+            "buy", ticker="A", shares=1, price=98, holding_type="Core", fees=2, path=self.path
+        )
+        ledger.transact(
+            "buy", ticker="A", shares=1, price=98, holding_type="Core", fees=2, path=self.path
+        )
+        self.assertAlmostEqual(ledger.account_performance(self.path).growth.iloc[-1], 96 / 98)
 
     def test_category_edit_does_not_change_quote_time(self):
-        ledger.transact("deposit", amount=100, path=self.path)
         ledger.transact("buy", ticker="A", shares=1, price=10, holding_type="Core", path=self.path)
         ledger.set_holding_type("A", "Moonshot", self.path)
         with database.connect(self.path) as conn:
@@ -129,12 +132,10 @@ class DatabaseTests(unittest.TestCase):
             self.assertIsNone(row["quote_updated_at"])
 
     def test_backup_preserves_data(self):
-        ledger.transact("deposit", amount=100, path=self.path)
+        ledger.transact("buy", ticker="A", shares=1, price=100, holding_type="Core", path=self.path)
         backup = database.backup_database(self.path)
         with sqlite3.connect(backup, factory=database.ManagedConnection) as conn:
-            self.assertEqual(
-                conn.execute("SELECT SUM(amount) FROM transactions").fetchone()[0], 100
-            )
+            self.assertEqual(conn.execute("SELECT SUM(shares) FROM portfolio").fetchone()[0], 1)
 
     def test_settings_validation_and_persistence(self):
         settings.save_settings(

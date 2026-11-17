@@ -1,7 +1,7 @@
 # Apothicaire — Risk Management
 
-A free portfolio dashboard that runs on your own computer. Record your stocks
-and cash, then see your performance against the S&P 500, risk and correlations,
+A free portfolio dashboard that runs on your own computer. Record your stocks,
+then see your performance against the S&P 500, risk and correlations,
 Monte Carlo projections and news about the companies you own.
 
 **Your data stays private.** Everything you enter is saved in a file on your
@@ -52,11 +52,10 @@ Never share your `.env` file. It contains your personal key.
 
 The dashboard starts empty. To add your holdings:
 
-1. Go to **Portfolio** → **Cash movements**, and record a **Deposit** for your
-   cash. Purchases are paid from this cash, so you need to deposit before buying.
-2. Under **Manage holdings**, enter a ticker (for example `AAPL`), the number of
-   shares and the price you paid, pick a **Holding type** (Core, High Conviction
-   or Moonshot) and click **Record Buy**.
+1. Go to **Portfolio** → **Manage holdings**.
+2. Enter a ticker (for example `AAPL`), the number of shares and the price you
+   paid, pick a **Holding type** (Core, High Conviction or Moonshot) and click
+   **Record Buy**.
 3. Repeat for each stock. Prices update automatically while the app is running.
 
 Analytics, Correlations and Monte Carlo fill in as soon as you have holdings.
@@ -113,8 +112,8 @@ dependencies are installed; see [sentiment setup](docs/sentiment.md).
 
 ## Pages
 
-- **Portfolio:** account value, holdings, cash, realized/unrealized P&L; validated
-  fractional buy/sell records; independent category edits; cash movements;
+- **Portfolio:** account value, holdings, realized/unrealized P&L; validated
+  fractional buy/sell records; independent category edits;
   searchable tables; quote timestamps; transaction history and allocation.
 - **Analytics:** historical model of today's allocation, alpha, beta, Sharpe,
   Sortino and drawdown; separate account returns recorded since opening.
@@ -138,9 +137,10 @@ root-level `portfolio.db`; it preserves original rows and records opening
 balances rather than inventing past transactions. Operational databases and
 backups are excluded from source control.
 
-Opening cash is zero until entered as a deposit. New buys require recorded cash;
-sells require an execution price and cannot exceed existing shares. Trades,
-cash movements and account valuations are committed atomically. Quote downloads
+Cash is not tracked: account value is the market value of the holdings, and
+buys and sales are treated as money added to or taken out of the account, so
+they don't count as returns. Sells require an execution price and cannot
+exceed existing shares. Trades and account valuations are committed atomically. Quote downloads
 occur outside write transactions and never change position edit timestamps.
 
 Read the [upgrade and calculation guide](docs/upgrade-guide.md) before relying
