@@ -533,6 +533,10 @@ layout = html.Div(
     *[Output("summary-" + k, "children") for k in ("nav", "unrealized", "realized")],
     Output("transaction-table", "data"),
     Output("portfolio-target-label", "children"),
+    Output("ticker-input", "value"),
+    Output("shares-input", "value"),
+    Output("avgprice-input", "value"),
+    Output("trade-fees", "value"),
     Input("add-btn", "n_clicks"),
     Input("remove-btn", "n_clicks"),
     Input("type-btn", "n_clicks"),
@@ -560,6 +564,8 @@ def modify_data(
 ):
     trigger = dash.ctx.triggered_id
     message = ""
+    # Keep what was typed unless a buy or sell is saved; then empty the boxes.
+    form = [dash.no_update] * 4
     try:
         if trigger in ("add-btn", "remove-btn"):
             message = modify_portfolio(
@@ -570,6 +576,7 @@ def modify_data(
                 holding_type,
                 fees,
             )
+            form = [None, None, None, 0]
         elif trigger == "type-btn":
             message = set_holding_type(ticker, holding_type)
         elif trigger in ("quote-refresh-btn", "interval-component"):
@@ -606,6 +613,7 @@ def modify_data(
         *[f"${summary[k]:,.2f}" for k in ("nav", "unrealized", "realized")],
         transaction_history().to_dict("records"),
         "Targets: " + " / ".join(f"{k} {v:g}%" for k, v in targets.items()),
+        *form,
     )
 
 
