@@ -186,6 +186,10 @@ def make_holding_type_chart(df):
     return fig
 
 
+def _field(label, input_id, control):
+    return html.Div([html.Label(label, htmlFor=input_id), control], className="form-field")
+
+
 def modify_portfolio(action, ticker, shares=None, avg_price=None, holding_type=None, fees=0):
     return transact(
         {"add": "buy", "remove": "sell"}.get(action, action),
@@ -262,49 +266,60 @@ layout = html.Div(
         html.Div(
             [
                 html.Div("Manage holdings", className="card-title"),
+                # Compact form: short fields side by side, each with a label above.
                 html.Div(
                     [
-                        dcc.Input(id="ticker-input", type="text", placeholder="Ticker (e.g. AAPL)"),
-                        dcc.Input(
-                            id="shares-input",
-                            type="number",
-                            placeholder="Shares",
-                            min=0.000001,
-                            step="any",
+                        _field(
+                            "Ticker",
+                            "ticker-input",
+                            dcc.Input(id="ticker-input", type="text", placeholder="e.g. AAPL"),
                         ),
-                        dcc.Input(
-                            id="avgprice-input",
-                            type="number",
-                            placeholder="Execution price",
-                            min=0.000001,
-                            step="any",
+                        _field(
+                            "Shares",
+                            "shares-input",
+                            dcc.Input(
+                                id="shares-input",
+                                type="number",
+                                placeholder="0",
+                                min=0.000001,
+                                step="any",
+                            ),
                         ),
-                        # drop down for categorisation
-                        dcc.Dropdown(
-                            id="holding-type-input",
-                            options=[
-                                {"label": "Core Holding", "value": "Core"},
-                                {"label": "High Conviction", "value": "High Conviction"},
-                                {"label": "Moonshot", "value": "Moonshot"},
-                            ],
-                            placeholder="Holding type",
-                            clearable=False,
+                        _field(
+                            "Price per share ($)",
+                            "avgprice-input",
+                            dcc.Input(
+                                id="avgprice-input",
+                                type="number",
+                                placeholder="0.00",
+                                min=0.000001,
+                                step="any",
+                            ),
                         ),
-                        # Starts at 0, so the placeholder never shows; label it explicitly.
-                        html.Div(
-                            [
-                                html.Label("Trade fees ($)", htmlFor="trade-fees"),
-                                dcc.Input(
-                                    id="trade-fees",
-                                    type="number",
-                                    placeholder="Fees",
-                                    min=0,
-                                    value=0,
-                                    step="any",
-                                ),
-                            ],
-                            className="labeled-field",
+                        _field(
+                            "Holding type",
+                            "holding-type-input",
+                            dcc.Dropdown(
+                                id="holding-type-input",
+                                options=[
+                                    {"label": "Core Holding", "value": "Core"},
+                                    {"label": "High Conviction", "value": "High Conviction"},
+                                    {"label": "Moonshot", "value": "Moonshot"},
+                                ],
+                                placeholder="Choose…",
+                                clearable=False,
+                            ),
                         ),
+                        _field(
+                            "Fees ($)",
+                            "trade-fees",
+                            dcc.Input(id="trade-fees", type="number", min=0, value=0, step="any"),
+                        ),
+                    ],
+                    className="holding-form",
+                ),
+                html.Div(
+                    [
                         html.Button("Record Buy", id="add-btn", n_clicks=0),
                         html.Button(
                             "Record Sell", id="remove-btn", n_clicks=0, className="secondary"
@@ -319,7 +334,7 @@ layout = html.Div(
                             className="secondary",
                         ),
                     ],
-                    className="toolbar",
+                    className="toolbar holding-actions",
                 ),
                 html.P(
                     "Enter the ticker, number of shares and the price you paid (or sold at). Fractional shares are supported."
