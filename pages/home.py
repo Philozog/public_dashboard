@@ -18,6 +18,7 @@ from Services.insights import prepare_holdings
 from Services.market import get_historical_prices
 from Services.news import NewsFetchError, fetch_market_news, fetch_portfolio_news
 from Services.sentiment import score_articles
+from Services.updater import update_prices
 
 dash.register_page(__name__, path="/", name="Home", title="Apothicaire", order=0)
 
@@ -193,16 +194,6 @@ def _glance_cards(data):
             lines.append(["Worst: ", html.B(worst[0]), " ", _signed_pct(worst[1])])
         cards.append(_card("Biggest movers, latest day", best[0], *lines))
 
-    updated = data["updated"]
-    if updated is not None:
-        cards.append(
-            _card(
-                "Prices last updated",
-                time_ago(updated.to_pydatetime(), datetime.now(timezone.utc)),
-                updated.strftime("%d %b, %H:%M UTC"),
-                dcc.Link("Refresh on Portfolio →", href="/portfolio", className="home-more"),
-            )
-        )
     return html.Div(cards, className="home-cards")
 
 
@@ -355,6 +346,10 @@ def _market_view():
     Input("home-name", "data"),
 )
 def _load_summary(_name):
+    # Fetch fresh quotes first (skipped when they are under 15 minutes old),
+    # so Home never shows stale values just because Portfolio wasn't opened.
+    if not load_data().empty:
+        update_prices()
     raw = load_data()
     holdings = prepare_holdings(raw)
     if holdings.empty:
