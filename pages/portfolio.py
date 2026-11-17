@@ -276,6 +276,63 @@ layout = html.Div(
             ],
             className="card",
         ),
+        # Import holdings from a broker or Yahoo Finance CSV export
+        html.Div(
+            [
+                html.Div("Import from file", className="card-title"),
+                html.P(
+                    "CSV export from Yahoo Finance or your broker. You'll see a preview first.",
+                    className="muted",
+                    style={"margin": "0 0 8px", "fontSize": "13px"},
+                ),
+                dcc.Upload(
+                    id="import-upload",
+                    children=html.Div(["Drop a CSV here or ", html.B("choose a file")]),
+                    accept=".csv,text/csv",
+                    max_size=2_000_000,
+                    style={
+                        "border": "1px dashed rgba(148, 163, 184, 0.45)",
+                        "borderRadius": "8px",
+                        "padding": "8px 12px",
+                        "textAlign": "center",
+                        "cursor": "pointer",
+                        "fontSize": "13px",
+                        "maxWidth": "420px",
+                    },
+                ),
+                html.Div(id="import-preview", style={"marginTop": "14px"}),
+                html.Div(
+                    [
+                        html.Div(
+                            [
+                                html.Label("Holding type for all", htmlFor="import-type"),
+                                dcc.Dropdown(
+                                    id="import-type",
+                                    options=[
+                                        {"label": "Core Holding", "value": "Core"},
+                                        {"label": "High Conviction", "value": "High Conviction"},
+                                        {"label": "Moonshot", "value": "Moonshot"},
+                                    ],
+                                    value="Core",
+                                    clearable=False,
+                                    style={"width": "200px"},
+                                ),
+                            ],
+                            className="form-field",
+                        ),
+                        html.Button("Import holdings", id="import-confirm", n_clicks=0),
+                        html.Button(
+                            "Cancel", id="import-cancel", n_clicks=0, className="secondary"
+                        ),
+                    ],
+                    id="import-actions",
+                    style={"display": "none"},
+                ),
+                dcc.Store(id="import-rows"),
+                dcc.Store(id="import-done"),
+            ],
+            className="card",
+        ),
         # Add / remove controls
         html.Div(
             [
@@ -356,62 +413,6 @@ layout = html.Div(
                 html.Div(id="portfolio-action-status", role="status", **{"aria-live": "polite"}),
             ],
             className="card portfolio-controls",
-        ),
-        # Import holdings from a broker or Yahoo Finance CSV export
-        html.Div(
-            [
-                html.Div("Import from file", className="card-title"),
-                html.P(
-                    "Export your holdings as a CSV file from Yahoo Finance (open the portfolio, then "
-                    "Export) or from your broker's Positions page, then upload it here. You'll see "
-                    "a preview before anything is saved.",
-                    className="muted",
-                ),
-                dcc.Upload(
-                    id="import-upload",
-                    children=html.Div(["Drop a CSV file here or ", html.B("choose a file")]),
-                    accept=".csv,text/csv",
-                    max_size=2_000_000,
-                    style={
-                        "border": "1px dashed rgba(148, 163, 184, 0.45)",
-                        "borderRadius": "8px",
-                        "padding": "18px",
-                        "textAlign": "center",
-                        "cursor": "pointer",
-                    },
-                ),
-                html.Div(id="import-preview", style={"marginTop": "14px"}),
-                html.Div(
-                    [
-                        html.Div(
-                            [
-                                html.Label("Holding type for all", htmlFor="import-type"),
-                                dcc.Dropdown(
-                                    id="import-type",
-                                    options=[
-                                        {"label": "Core Holding", "value": "Core"},
-                                        {"label": "High Conviction", "value": "High Conviction"},
-                                        {"label": "Moonshot", "value": "Moonshot"},
-                                    ],
-                                    value="Core",
-                                    clearable=False,
-                                    style={"width": "200px"},
-                                ),
-                            ],
-                            className="form-field",
-                        ),
-                        html.Button("Import holdings", id="import-confirm", n_clicks=0),
-                        html.Button(
-                            "Cancel", id="import-cancel", n_clicks=0, className="secondary"
-                        ),
-                    ],
-                    id="import-actions",
-                    style={"display": "none"},
-                ),
-                dcc.Store(id="import-rows"),
-                dcc.Store(id="import-done"),
-            ],
-            className="card",
         ),
         # Correct or delete a mistyped holding (opened by a row's Edit link)
         html.Div(id="edit-status", role="status", **{"aria-live": "polite"}),
