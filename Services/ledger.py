@@ -119,6 +119,48 @@ def transact(
     return f"Recorded {kind}: {qty:g} {ticker} at ${execution:,.2f}."
 
 
+def correct_holding(
+    ticker, shares=None, avg_price=None, holding_type=None, delete=False, path=None
+):
+    """Fix a mistyped holding (or delete it) without counting it as a trade.
+
+    The change in value is booked as an external flow, so it never shows up
+    as a gain or loss in recorded returns. A "correction" row keeps the history.
+    """
+    ticker = str(ticker or "").strip().upper()
+    with connect(path) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute("SELECT * FROM portfolio WHERE ticker=?", (ticker,)).fetchone()
+        if not row:
+            raise ValueError(f"{ticker or 'That holding'} is not in your portfolio.")
+        record_valuation(conn)
+        before = f"{row['shares']:g} shares at ${row['avg_price']:,.2f}"
+        old_value = row["market_value"] or 0.0
+        if delete:
+            conn.execute("DELETE FROM portfolio WHERE ticker=?", (ticker,))
+            note, qty, price, new_value = f"Deleted holding (was {before}).", 0.0, 0.0, 0.0
+            message = f"Deleted {ticker}."
+        else:
+            qty = number(shares, "shares", True)
+            price = number(avg_price, "average cost", True)
+            if holding_type not in HOLDING_TYPES:
+                raise ValueError("Select a valid holding type.")
+            quote = row["current_price"] or price
+            new_value = qty * quote
+            conn.execute(
+                "UPDATE portfolio SET shares=?,avg_price=?,market_value=?,Total_Profit_Loss=?,holding_type=?,last_updated=? WHERE ticker=?",
+                (qty, price, new_value, (quote - price) * qty, holding_type, utc_now(), ticker),
+            )
+            note = f"Corrected from {before}."
+            message = f"Corrected {ticker}: {qty:g} shares at ${price:,.2f}."
+        conn.execute(
+            "INSERT INTO transactions(timestamp,kind,ticker,shares,price,amount,fees,realized_pnl,note) VALUES(?,?,?,?,?,0,0,0,?)",
+            (utc_now(), "correction", ticker, qty, price, note),
+        )
+        record_valuation(conn, new_value - old_value)
+    return message
+
+
 def set_holding_type(ticker, holding_type, path=None):
     if holding_type not in HOLDING_TYPES:
         raise ValueError("Select a valid holding type.")
