@@ -1,6 +1,7 @@
 import dash
 from dash import Input, Output, State, dcc, html, no_update
 
+from Services.components import holding_types_help
 from Services.database import backup_database, utc_now
 from Services.settings import get_settings, save_settings
 
@@ -34,6 +35,7 @@ def layout():
             html.P(
                 "Targets must total 100%. These parameters apply to analytics, allocation and concentration checks."
             ),
+            holding_types_help(),
             html.Div(
                 [
                     html.Div(

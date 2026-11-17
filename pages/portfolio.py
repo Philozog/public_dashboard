@@ -9,7 +9,7 @@ from dash import dash_table, dcc, html
 from dash.dependencies import Input, Output, State
 
 from Services import insights, theme
-from Services.components import metric_card
+from Services.components import holding_types_help, metric_card
 from Services.database import current_path
 from Services.helper import load_data
 from Services.importer import parse_positions
@@ -389,6 +389,7 @@ layout = html.Div(
                     ],
                     className="holding-form",
                 ),
+                holding_types_help(),
                 html.Div(
                     [
                         html.Button("Record Buy", id="add-btn", n_clicks=0),
