@@ -2,6 +2,7 @@
 
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 from unittest.mock import patch
 
@@ -111,3 +112,75 @@ class HomeSummaryTests(unittest.TestCase):
         self.assertEqual(home_summary.time_ago(now - pd.Timedelta(minutes=5), now), "5 min ago")
         self.assertEqual(home_summary.time_ago(now - pd.Timedelta(hours=3), now), "3 h ago")
         self.assertEqual(home_summary.time_ago(now - pd.Timedelta(days=3), now), "3 days ago")
+
+
+class MarketViewTests(unittest.TestCase):
+    def test_market_snapshot_units(self):
+        index = pd.to_datetime(["2025-12-31", "2026-01-02", "2026-11-16", "2026-11-17"])
+        prices = pd.DataFrame(
+            {
+                "^GSPC": [5000, 5000, 6000, 6060],
+                "^TNX": [4.0, 4.0, 4.20, 4.25],
+                "^VIX": [20, 20, 15, 16.5],
+            },
+            index=index,
+        )
+        rows = {row["symbol"]: row for row in home_summary.market_snapshot(prices)}
+        self.assertEqual(set(rows), {"^GSPC", "^TNX", "^VIX"})  # missing indexes are skipped
+        self.assertAlmostEqual(rows["^GSPC"]["pct"], 0.01)
+        self.assertAlmostEqual(rows["^GSPC"]["ytd_pct"], 6060 / 5000 - 1)
+        self.assertAlmostEqual(rows["^TNX"]["change"] * 100, 5)  # +5 basis points
+        self.assertAlmostEqual(rows["^VIX"]["change"], 1.5)
+
+    def test_market_news_ranks_market_stories_first_and_caches(self):
+        from Services import news
+
+        payload = {
+            "status": "ok",
+            "articles": [
+                {
+                    "title": "New phone colours announced - Gadget Times",
+                    "source": {"name": "Gadget Times"},
+                    "publishedAt": "2026-11-17T14:00:00Z",
+                    "url": "u1",
+                },
+                {
+                    "title": "Stocks rise as Fed signals rate cut - Reuters",
+                    "source": {"name": "Reuters"},
+                    "publishedAt": "2026-11-17T12:00:00Z",
+                    "url": "u2",
+                    "description": "S&P 500 gains.",
+                },
+                {
+                    "title": "[Removed]",
+                    "source": {"name": "x"},
+                    "publishedAt": "2026-11-17T12:00:00Z",
+                    "url": "u3",
+                },
+            ],
+        }
+        response = unittest.mock.Mock(status_code=200, content=b"{}", reason="OK")
+        response.json.return_value = payload
+        news._market_cache.clear()
+        with (
+            patch.object(news, "_api_key", return_value="key"),
+            patch.object(news.requests, "get", return_value=response) as get,
+        ):
+            first = news.fetch_market_news()
+            second = news.fetch_market_news()
+        self.assertEqual(get.call_count, 1)  # second call served from cache
+        self.assertEqual(
+            [a["title"] for a in first],
+            ["Stocks rise as Fed signals rate cut", "New phone colours announced"],
+        )
+        self.assertEqual(first, second)
+        news._market_cache.clear()
+
+    def test_market_news_needs_a_key(self):
+        from Services import news
+
+        with (
+            patch.object(news, "_api_key", return_value=None),
+            self.assertRaises(news.NewsFetchError),
+        ):
+            news.fetch_market_news()

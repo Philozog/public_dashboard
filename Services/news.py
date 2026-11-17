@@ -308,3 +308,97 @@ def fetch_portfolio_news(tickers, per_ticker=8, max_items=20, force=False):
         _cache[key] = {"articles": articles, "fetched_at": now}
         _set_info("live", None, now)
         return _trim(articles, per_ticker, max_items)
+
+
+# --------------------------------------------------------------------------
+# Market-wide headlines (Home page for people with no holdings yet)
+# --------------------------------------------------------------------------
+
+TOP_HEADLINES_ENDPOINT = "https://newsapi.org/v2/top-headlines"
+MARKET_CACHE_TTL = timedelta(minutes=30)
+# Words that make a business headline about the market rather than, say, a product.
+MARKET_KEYWORDS = {
+    "s&p": 5,
+    "s&p 500": 5,
+    "stocks": 4,
+    "stock market": 5,
+    "wall street": 4,
+    "dow": 4,
+    "nasdaq": 4,
+    "fed": 4,
+    "federal reserve": 5,
+    "rates": 3,
+    "inflation": 4,
+    "jobs": 3,
+    "treasury": 3,
+    "yields": 3,
+    "earnings": 3,
+    "oil": 2,
+    "recession": 3,
+    "tariff": 3,
+    "markets": 3,
+}
+_market_cache = {}
+
+
+def _market_score(article):
+    text = f"{article.get('title') or ''} {article.get('description') or ''}".lower()
+    return sum(
+        weight
+        for word, weight in MARKET_KEYWORDS.items()
+        if re.search(rf"(?<!\w){re.escape(word)}(?!\w)", text)
+    )
+
+
+def _clean_title(title, source):
+    # Top-headlines titles usually end with " - Source Name".
+    suffix = f" - {source}"
+    return title[: -len(suffix)] if source and title.endswith(suffix) else title
+
+
+def fetch_market_news(max_items=5):
+    """Today's US business headlines, most market-relevant first. Shared by everyone."""
+    if not _api_key():
+        raise NewsFetchError("NEWS_API_KEY is not set.")
+    now = datetime.now(timezone.utc)
+    with _lock:
+        cached = _market_cache.get("us")
+        if cached and now - cached["fetched_at"] < MARKET_CACHE_TTL:
+            return cached["articles"][:max_items]
+        try:
+            response = requests.get(
+                TOP_HEADLINES_ENDPOINT,
+                params={"country": "us", "category": "business", "pageSize": 30},
+                headers={"X-Api-Key": _api_key()},
+                timeout=REQUEST_TIMEOUT,
+            )
+            payload = response.json() if response.content else {}
+            if response.status_code != 200 or payload.get("status") != "ok":
+                code = payload.get("code") or response.status_code
+                raise NewsFetchError(
+                    f"NewsAPI error {code}: {payload.get('message') or response.reason}"
+                )
+        except (requests.RequestException, ValueError, NewsFetchError) as exc:
+            if cached:
+                return cached["articles"][:max_items]
+            raise NewsFetchError(str(exc)) from exc
+
+        articles = []
+        for raw in payload.get("articles", []):
+            published_at = _parse_published_at(raw.get("publishedAt"))
+            title = raw.get("title") or ""
+            if not published_at or not title or title == "[Removed]":
+                continue
+            source = (raw.get("source") or {}).get("name") or "Unknown source"
+            article = {
+                "title": _clean_title(title, source),
+                "description": raw.get("description") or "",
+                "url": raw.get("url") or "",
+                "source": source,
+                "published_at": published_at,
+            }
+            article["market_score"] = _market_score(article)
+            articles.append(article)
+        articles.sort(key=lambda a: (a["market_score"], a["published_at"]), reverse=True)
+        _market_cache["us"] = {"articles": articles, "fetched_at": now}
+        return articles[:max_items]
