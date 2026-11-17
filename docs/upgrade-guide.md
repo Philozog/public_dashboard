@@ -73,10 +73,10 @@ The market shock scenario uses historical beta and covered invested value. The
 holding-type scenario directly shocks all positions in the selected category.
 These are separate scenarios, not combined forecasts or probabilities.
 
-## Settings, news and sentiment
+## Parameters, news and sentiment
 
 Risk-free rate, allocation targets, concentration limit and drift tolerance are
-saved under Settings. Targets must sum to 100%. History and benchmark preferences
+saved under Parameters. Targets must sum to 100%. History and benchmark preferences
 are remembered in the browser. All monetary values assume one USD account;
 foreign-currency conversion and corporate-action ledger adjustments are not
 automatically performed.
@@ -95,7 +95,7 @@ keyword fallback unless the model libraries and weights are available.
 
 ## Backups and deployment
 
-Create a consistent SQLite backup from Settings. Keep off-machine copies too.
+Create a consistent SQLite backup from Parameters. Keep off-machine copies too.
 To restore, stop the app and set `APOTHICAIRE_DB` to a copied backup, then restart.
 Never overwrite an active database. The old root database is a preserved legacy
 copy and is no longer the live database.

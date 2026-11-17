@@ -27,7 +27,12 @@ app = Dash(
     suppress_callback_exceptions=True,
     title="Apothicaire",
 )
-nav_pages = [page for page in dash.page_registry.values() if page["path"] != "/portfolio-news"]
+# Disclosures gets its own button, set apart at the end of the menu.
+nav_pages = [
+    page
+    for page in dash.page_registry.values()
+    if page["path"] not in ("/portfolio-news", "/disclosures")
+]
 
 app.layout = html.Div(
     [
@@ -46,6 +51,15 @@ app.layout = html.Div(
                             id=f"nav-link-{index}",
                         )
                         for index, page in enumerate(nav_pages)
+                    ]
+                    + [
+                        html.Span(className="nav-divider", **{"aria-hidden": "true"}),
+                        dcc.Link(
+                            "Disclosures",
+                            href="/disclosures",
+                            className="nav-link nav-link-apart",
+                            id="nav-link-disclosures",
+                        ),
                     ],
                     className="navbar",
                 ),
@@ -123,6 +137,14 @@ app.clientside_callback(
         return paths.map(linkPath => path === linkPath ? 'nav-link active' : 'nav-link');
     }}""",
     [Output(f"nav-link-{index}", "className") for index in range(len(nav_pages))],
+    Input("url", "pathname"),
+)
+
+app.clientside_callback(
+    """function(path) {
+        return path === '/disclosures' ? 'nav-link nav-link-apart active' : 'nav-link nav-link-apart';
+    }""",
+    Output("nav-link-disclosures", "className"),
     Input("url", "pathname"),
 )
 
