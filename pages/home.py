@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 import dash
@@ -5,6 +6,7 @@ import plotly.graph_objects as go
 from dash import Input, Output, dcc, html
 
 from Services import accounts
+from Services.database import current_path
 from Services.helper import load_data
 from Services.home_summary import (
     BENCHMARK,
@@ -346,16 +348,20 @@ def _market_view():
     Input("home-name", "data"),
 )
 def _load_summary(_name):
-    # Fetch fresh quotes first (skipped when they are under 15 minutes old),
-    # so Home never shows stale values just because Portfolio wasn't opened.
-    if not load_data().empty:
-        update_prices()
-    raw = load_data()
-    holdings = prepare_holdings(raw)
-    if holdings.empty:
+    path = current_path()  # worker threads can't see the signed-in person, so pass it
+    tickers = list(prepare_holdings(load_data(path))["ticker"])
+    if not tickers:
         # Nothing of their own to show yet: show the day's market instead.
         return _market_view(), None, {"display": "none"}
-    prices = get_historical_prices(list(holdings["ticker"]) + [BENCHMARK], period="1y")
+    # The two slow internet calls run at the same time instead of one after the other:
+    # fresh quotes (skipped when under 15 minutes old) and a year of daily history.
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        quotes = pool.submit(update_prices, False, path)
+        history = pool.submit(get_historical_prices, tickers + [BENCHMARK], "1y")
+        quotes.result()
+        prices = history.result()
+    raw = load_data(path)
+    holdings = prepare_holdings(raw)
     data = glance(holdings, prices, raw_holdings=raw)
     items = alerts(holdings, raw, data["movers"])
     if not items:

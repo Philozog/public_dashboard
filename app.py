@@ -26,6 +26,8 @@ app = Dash(
     use_pages=True,
     suppress_callback_exceptions=True,
     title="Apothicaire",
+    # Gzip pages and the app's JavaScript: first visits download far less.
+    compress=True,
 )
 # Parameters and Disclosures live in the small top corner, not the main menu.
 CORNER_PAGES = [("Parameters", "/parameters"), ("Disclosures", "/disclosures")]
