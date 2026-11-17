@@ -13,8 +13,9 @@ from Services.ledger import record_valuation
 LOG = logging.getLogger(__name__)
 
 
-def update_prices(force=False):
-    holdings = load_data()
+def update_prices(force=False, path=None):
+    """Refresh stale quotes. path lets a worker thread name the signed-in person's file."""
+    holdings = load_data(path)
     if holdings.empty:
         return "No holdings to refresh."
     now = pd.Timestamp.now(tz="UTC")
@@ -54,7 +55,7 @@ def update_prices(force=False):
                     stamp.tz_localize("UTC") if stamp.tzinfo is None else stamp.tz_convert("UTC")
                 )
                 quotes[ticker] = (float(series.iloc[-1]), stamp.isoformat())
-    with connect() as conn:
+    with connect(path) as conn:
         conn.execute("BEGIN IMMEDIATE")
         for ticker in tickers:
             conn.execute(

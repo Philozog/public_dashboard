@@ -42,7 +42,7 @@ class DatabaseTests(unittest.TestCase):
         )
         observation = pd.Timestamp("2026-01-05 21:00", tz="UTC")
 
-        def holdings():
+        def holdings(*_):
             with database.connect(self.path) as conn:
                 return pd.read_sql_query("SELECT * FROM portfolio", conn)
 
@@ -53,7 +53,7 @@ class DatabaseTests(unittest.TestCase):
 
         with (
             patch.object(updater, "load_data", side_effect=holdings),
-            patch.object(updater, "connect", side_effect=lambda: database.connect(self.path)),
+            patch.object(updater, "connect", side_effect=lambda *_: database.connect(self.path)),
             patch.object(updater.yf, "download", side_effect=download) as fetch,
         ):
             self.assertIn("Refreshed 1", updater.update_prices())

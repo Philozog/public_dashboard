@@ -19,8 +19,8 @@ EXPECTED_COLUMNS = [
 ]
 
 
-def load_data():
-    with connect() as conn:
+def load_data(path=None):
+    with connect(path) as conn:
         holdings = pd.read_sql_query("SELECT * FROM portfolio ORDER BY ticker", conn)[
             EXPECTED_COLUMNS
         ]
