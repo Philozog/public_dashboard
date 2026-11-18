@@ -1563,3 +1563,5 @@ details > summary { cursor: pointer; padding: 8px 0; font-weight: 700; }
 @media (max-width: 900px) {
     .mc-assumptions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+.mc-help { color: var(--muted); font-size: 12px; line-height: 1.45; }
+.mc-assumptions { align-items: start; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
