@@ -6,11 +6,9 @@ import plotly.graph_objects as go
 from dash import Input, Output, dcc, html
 
 from Services import theme
-from Services.components import metric_card as _metric_card
 from Services.helper import load_data
 from Services.market import (
     clean_returns,
-    coverage_text,
     get_historical_prices,
 )
 from Services.market import (
@@ -22,6 +20,48 @@ from Services.theme import blank_figure
 
 dash.register_page(__name__, path="/covariance", name="Correlations", title="Correlations", order=3)
 
+_PERIOD_LABEL = {"6mo": "6 months", "1y": "1 year", "3y": "3 years", "5y": "5 years"}
+
+
+def _explained_card(title, value_id, meaning):
+    return html.Div(
+        [
+            html.Div(title, className="metric-title"),
+            html.Div("--", id=value_id, className="metric-value"),
+            html.Div(meaning, className="muted", style={"fontSize": "12px", "marginTop": "6px"}),
+        ],
+        className="metric-card",
+    )
+
+
+def _diversification_text(ratio, avg_vol, volatility):
+    if ratio is None:
+        return ""
+    return (
+        f"Your stocks swing about {avg_vol:.0%} a year on their own, but together only "
+        f"{volatility:.0%}, because they don't all move at once. 1.0× would mean no benefit; "
+        "higher is better."
+    )
+
+
+def _plain_status(holdings, returns, period, benchmark):
+    values = holdings.groupby("ticker")["market_value"].sum()
+    included = list(returns.columns)
+    total = float(values.sum())
+    covered = float(values.reindex(included).fillna(0).sum()) / total if total else 0
+    missing = sorted(set(values.index) - set(included))
+    if returns.empty:
+        return f"No common price history for the last {_PERIOD_LABEL.get(period, period)}."
+    text = (
+        f"Based on {len(returns)} trading days of prices ({returns.index.min():%d %b %Y} to "
+        f"{returns.index.max():%d %b %Y}) for {len(included)} of {len(values)} holdings "
+        f"({covered:.0%} of your money), compared with {benchmark}."
+    )
+    if missing:
+        text += f" Left out (no price history): {', '.join(missing)}."
+    return text
+
+
 layout = html.Div(
     [
         dcc.Location(id="cov_location"),
@@ -32,19 +72,34 @@ layout = html.Div(
                 [
                     html.Div(
                         [
-                            _metric_card(label, key)
-                            for label, key in [
-                                (
-                                    "Portfolio annualized volatility",
-                                    "covariance-metric-portfolio-vol",
-                                ),
-                                ("Benchmark volatility", "covariance-metric-spy-vol"),
-                                ("Diversification ratio", "covariance-metric-div-ratio"),
-                            ]
+                            _explained_card(
+                                "Your portfolio's yearly swings",
+                                "covariance-metric-portfolio-vol",
+                                "In a typical year, your portfolio's value moves up or down by about "
+                                "this much (annualized volatility).",
+                            ),
+                            _explained_card(
+                                "Market's yearly swings",
+                                "covariance-metric-spy-vol",
+                                "The same measure for the benchmark chosen at the top of the page, "
+                                "for comparison. Higher than the market means a bumpier ride.",
+                            ),
+                            _explained_card(
+                                "Diversification benefit",
+                                "covariance-metric-div-ratio",
+                                html.Span(id="covariance-div-explain"),
+                            ),
                         ],
                         className="summary-grid",
                     ),
                     html.Div(id="covariance-status", className="data-status"),
+                    html.P(
+                        "The grid below shows how each pair of stocks moves together: 1 = always "
+                        "move together, 0 = unrelated, -1 = move in opposite directions. Pairs that "
+                        "move together give less protection when markets fall.",
+                        className="muted",
+                        style={"fontSize": "13px", "margin": "0 0 4px"},
+                    ),
                     dcc.Graph(id="covariance-heatmap", figure=blank_figure()),
                     html.Div(id="covariance-insights", className="panel"),
                     html.H3("Money vs risk", className="card-title", style={"marginTop": "24px"}),
@@ -149,6 +204,7 @@ def _risk_table(table):
     Output("covariance-metric-portfolio-vol", "children"),
     Output("covariance-metric-spy-vol", "children"),
     Output("covariance-metric-div-ratio", "children"),
+    Output("covariance-div-explain", "children"),
     Output("risk-contribution-chart", "figure"),
     Output("risk-takeaway", "children"),
     Output("risk-table", "children"),
@@ -159,7 +215,7 @@ def _risk_table(table):
 )
 def refresh_covariance(_pathname, period="1y", benchmark="SPY", _version=None):
     def empty(message):
-        return message, px.line(), "", "N/A", "N/A", "N/A", px.line(), "", ""
+        return message, px.line(), "", "N/A", "N/A", "N/A", "", px.line(), "", ""
 
     holdings = load_data()
     if holdings.empty or holdings.market_value.sum() <= 0:
@@ -176,7 +232,7 @@ def refresh_covariance(_pathname, period="1y", benchmark="SPY", _version=None):
     if not bench.empty:
         common = returns.index.intersection(bench.index)
         returns, bench = returns.loc[common], bench.loc[common]
-    status = coverage_text(holdings, returns, period, benchmark)
+    status = _plain_status(holdings, returns, period, benchmark)
     if len(returns) < 30 or returns.shape[1] == 0:
         return empty(status + " At least 30 complete common observations are required.")
     values = holdings.set_index("ticker").market_value.reindex(returns.columns)
@@ -193,8 +249,8 @@ def refresh_covariance(_pathname, period="1y", benchmark="SPY", _version=None):
         zmin=-1,
         zmax=1,
         color_continuous_scale="RdBu",
-        title=f"Daily-return correlations ({period})",
-        labels={"color": "Correlation"},
+        title=f"How your stocks move together ({_PERIOD_LABEL.get(period, period)})",
+        labels={"color": "Moves together"},
     )
     table = risk_vs_weight(returns, weights)
     contribution_fig = _money_vs_risk_chart(table)
@@ -202,11 +258,12 @@ def refresh_covariance(_pathname, period="1y", benchmark="SPY", _version=None):
     top = weights.idxmax()
     explanation = [
         html.P(
-            f"Largest modeled holding: {top} ({weights[top]:.1%}). Concentration limit: {settings['concentration']:g}%."
+            f"Largest holding: {top} ({weights[top]:.1%} of your money). Your limit for a single "
+            f"holding: {settings['concentration']:g}%."
         )
     ]
     if weights[top] * 100 > settings["concentration"]:
-        explanation.append(html.P("This holding exceeds your configured concentration limit."))
+        explanation.append(html.P("This holding is above your limit (set on the Parameters page)."))
     pairs = [
         (a, b, float(corr.loc[a, b]))
         for i, a in enumerate(corr)
@@ -219,25 +276,31 @@ def refresh_covariance(_pathname, period="1y", benchmark="SPY", _version=None):
     explanation.append(
         html.Ul(
             [
-                html.Li(f"{a} / {b}: {v:.2f} ({'move together' if v > 0 else 'tend to offset'}).")
+                html.Li(
+                    f"{a} and {b}: {v:.2f} "
+                    f"({'strongly move together' if v > 0 else 'tend to move in opposite directions'})."
+                )
                 for a, b, v in strong
             ]
         )
         if strong
-        else html.P("No pair has absolute correlation of at least 0.70 in this sample.")
+        else html.P("No two holdings move closely together (none at 0.70 or above) in this period.")
     )
     explanation.append(
         html.P(
-            "Diversification ratio = weighted average individual volatility / portfolio volatility. It describes this sample, not a guarantee about future diversification."
+            "These figures describe the chosen period and can change, especially in a crisis, "
+            "when stocks tend to move together more.",
+            className="muted",
         )
     )
     return (
         status,
         fig,
         explanation,
-        f"{volatility:.2%}",
-        f"{bench.std() * np.sqrt(252):.2%}" if len(bench) > 1 else "N/A",
-        f"{ratio:.2f}" if ratio is not None else "N/A",
+        f"{volatility:.1%}",
+        f"{bench.std() * np.sqrt(252):.1%}" if len(bench) > 1 else "N/A",
+        f"{ratio:.2f}×" if ratio is not None else "N/A",
+        _diversification_text(ratio, avg_vol, volatility),
         contribution_fig,
         risk_takeaway(table),
         _risk_table(table),
