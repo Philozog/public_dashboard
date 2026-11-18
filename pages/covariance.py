@@ -2,8 +2,10 @@ import dash
 import numpy as np
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 from dash import Input, Output, dcc, html
 
+from Services import theme
 from Services.components import metric_card as _metric_card
 from Services.helper import load_data
 from Services.market import (
@@ -14,7 +16,7 @@ from Services.market import (
 from Services.market import (
     no_history_message as _no_history,
 )
-from Services.performance import risk_contributions, valid_covariance
+from Services.performance import RISK_HEAVY, risk_takeaway, risk_vs_weight, valid_covariance
 from Services.settings import get_settings
 from Services.theme import blank_figure
 
@@ -45,10 +47,20 @@ layout = html.Div(
                     html.Div(id="covariance-status", className="data-status"),
                     dcc.Graph(id="covariance-heatmap", figure=blank_figure()),
                     html.Div(id="covariance-insights", className="panel"),
+                    html.H3("Money vs risk", className="card-title", style={"marginTop": "24px"}),
+                    html.P(id="risk-takeaway", className="risk-takeaway"),
                     dcc.Graph(id="risk-contribution-chart", figure=blank_figure()),
+                    html.Div(id="risk-table"),
                     html.P(
-                        "Risk contribution is each holding's share of modeled portfolio variance, using current invested weights. "
-                        "A negative contribution can indicate a diversifying position. Cash is excluded."
+                        "Risk contribution is the share of the portfolio's modeled ups and downs "
+                        "(variance) attributed to each holding, including its share of how it moves "
+                        "with the others. A risk/weight above 1.0× means it adds more risk than its "
+                        "share of your money; below 1.0× it helps diversify, and a negative value "
+                        "means it tends to offset the rest. Standalone volatility is how much the "
+                        "stock swings on its own in a year, ignoring the other holdings. Uses current "
+                        "invested weights; cash is excluded.",
+                        className="muted",
+                        style={"fontSize": "13px"},
                     ),
                 ]
             ),
@@ -59,6 +71,77 @@ layout = html.Div(
 )
 
 
+def _money_vs_risk_chart(table):
+    heavy = table["ratio"] >= RISK_HEAVY
+    fig = go.Figure(
+        [
+            go.Bar(
+                name="Share of money",
+                x=table.index,
+                y=table["weight"] * 100,
+                marker_color="rgba(148, 163, 184, 0.55)",
+                hovertemplate="%{x}: %{y:.1f}% of money<extra></extra>",
+            ),
+            go.Bar(
+                name="Share of risk",
+                x=table.index,
+                y=table["risk"] * 100,
+                marker_color=[theme.NEGATIVE if h else theme.ACCENT_BRIGHT for h in heavy],
+                text=[f"{r:.2f}×" if pd.notna(r) else "" for r in table["ratio"]],
+                textposition="outside",
+                hovertemplate="%{x}: %{y:.1f}% of risk (%{text})<extra></extra>",
+            ),
+        ]
+    )
+    fig.update_layout(
+        barmode="group",
+        title="Share of money vs share of risk (red = at least 10% more risk than money)",
+        yaxis_title="% of portfolio",
+        legend={"orientation": "h", "x": 0, "y": 1.02, "yanchor": "bottom"},
+        margin={"t": 90},
+    )
+    fig.update_yaxes(ticksuffix="%", automargin=True, title_standoff=16)
+    return fig
+
+
+def _risk_table(table):
+    def cell(value, fmt):
+        return html.Td(fmt.format(value) if pd.notna(value) else "—")
+
+    header = [
+        "Stock",
+        "Weight",
+        "Risk contribution",
+        "Risk/weight",
+        "Standalone volatility (yearly)",
+    ]
+    rows = [
+        html.Tr(
+            [
+                html.Td(ticker, style={"fontWeight": "700"}),
+                cell(row["weight"], "{:.1%}"),
+                cell(row["risk"], "{:.1%}"),
+                html.Td(
+                    f"{row['ratio']:.2f}×" if pd.notna(row["ratio"]) else "—",
+                    style={
+                        "color": theme.NEGATIVE if row["ratio"] >= RISK_HEAVY else theme.TEXT,
+                        "fontWeight": "700" if row["ratio"] >= RISK_HEAVY else "400",
+                    },
+                ),
+                cell(row["volatility"], "{:.1%}"),
+            ]
+        )
+        for ticker, row in table.iterrows()
+    ]
+    return html.Div(
+        html.Table(
+            [html.Thead(html.Tr([html.Th(h) for h in header])), html.Tbody(rows)],
+            className="risk-table",
+        ),
+        style={"overflowX": "auto"},
+    )
+
+
 @dash.callback(
     Output("covariance-status", "children"),
     Output("covariance-heatmap", "figure"),
@@ -67,6 +150,8 @@ layout = html.Div(
     Output("covariance-metric-spy-vol", "children"),
     Output("covariance-metric-div-ratio", "children"),
     Output("risk-contribution-chart", "figure"),
+    Output("risk-takeaway", "children"),
+    Output("risk-table", "children"),
     Input("cov_location", "pathname"),
     Input("analysis-period", "value"),
     Input("analysis-benchmark", "value"),
@@ -74,7 +159,7 @@ layout = html.Div(
 )
 def refresh_covariance(_pathname, period="1y", benchmark="SPY", _version=None):
     def empty(message):
-        return message, px.line(), "", "N/A", "N/A", "N/A", px.line()
+        return message, px.line(), "", "N/A", "N/A", "N/A", px.line(), "", ""
 
     holdings = load_data()
     if holdings.empty or holdings.market_value.sum() <= 0:
@@ -111,13 +196,8 @@ def refresh_covariance(_pathname, period="1y", benchmark="SPY", _version=None):
         title=f"Daily-return correlations ({period})",
         labels={"color": "Correlation"},
     )
-    contributions = risk_contributions(returns, weights) * 100
-    contribution_fig = px.bar(
-        x=contributions.index,
-        y=contributions.values,
-        labels={"x": "Holding", "y": "Share of portfolio variance (%)"},
-        title="Which holdings drive portfolio risk?",
-    )
+    table = risk_vs_weight(returns, weights)
+    contribution_fig = _money_vs_risk_chart(table)
     settings = get_settings()
     top = weights.idxmax()
     explanation = [
@@ -159,4 +239,6 @@ def refresh_covariance(_pathname, period="1y", benchmark="SPY", _version=None):
         f"{bench.std() * np.sqrt(252):.2%}" if len(bench) > 1 else "N/A",
         f"{ratio:.2f}" if ratio is not None else "N/A",
         contribution_fig,
+        risk_takeaway(table),
+        _risk_table(table),
     )

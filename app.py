@@ -70,7 +70,9 @@ app.layout = html.Div(
                     ],
                     className="top-bar",
                 ),
-                html.H1("AP Terminal", className="main-title"),
+                dcc.Link(
+                    html.H1("AP Terminal", className="main-title"), href="/", className="title-link"
+                ),
                 # Navigation Bar
                 html.Div(
                     [

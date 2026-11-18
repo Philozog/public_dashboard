@@ -86,6 +86,44 @@ def risk_contributions(returns, weights):
     return pd.Series(w * (cov @ w) / variance, index=returns.columns)
 
 
+RISK_HEAVY = 1.10  # flag holdings with at least 10% more risk than money
+
+
+def risk_vs_weight(returns, weights):
+    """Per holding: capital weight, share of portfolio variance, their ratio and
+    standalone annualized volatility, sorted with the most risk-heavy first.
+
+    Risk contribution includes each holding's share of its covariance with the
+    others; standalone volatility is the holding on its own.
+    """
+    contributions = risk_contributions(returns, weights)
+    cov = valid_covariance(returns)
+    w = weights.reindex(returns.columns).astype(float)
+    table = pd.DataFrame(
+        {
+            "weight": w,
+            "risk": contributions,
+            "ratio": (contributions / w).where(w > 0),
+            "volatility": pd.Series(np.sqrt(np.diag(cov) * TRADING_DAYS), index=returns.columns),
+        }
+    )
+    return table.sort_values(["ratio", "risk"], ascending=False)
+
+
+def risk_takeaway(table):
+    """One plain sentence on where risk sits compared with money."""
+    heavy = table[table["ratio"] >= RISK_HEAVY]
+    if heavy.empty:
+        return "No holding adds noticeably more risk than its share of your money."
+    names = list(heavy.index)
+    listed = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+    verb = "is" if len(names) == 1 else "are"
+    return (
+        f"{listed} {verb} {heavy['weight'].sum():.0%} of your money but "
+        f"{heavy['risk'].sum():.0%} of your risk."
+    )
+
+
 def portfolio_growth(log_returns, weights):
     return np.exp(log_returns) @ np.asarray(weights)
 
