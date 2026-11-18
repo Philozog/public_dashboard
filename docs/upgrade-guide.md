@@ -1,4 +1,4 @@
-# Apothicaire: account records and risk calculations
+# AP Terminal: account records and risk calculations
 
 ## Existing holdings
 

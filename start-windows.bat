@@ -1,8 +1,8 @@
 @echo off
-rem Double-click to install (first time only) and start Apothicaire.
+rem Double-click to install (first time only) and start AP Terminal.
 setlocal
 cd /d "%~dp0"
-title Apothicaire
+title AP Terminal
 
 set "PY="
 py -3 --version >nul 2>&1 && set "PY=py -3"

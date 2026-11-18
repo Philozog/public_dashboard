@@ -25,7 +25,7 @@ app = Dash(
     __name__,
     use_pages=True,
     suppress_callback_exceptions=True,
-    title="Apothicaire",
+    title="AP Terminal",
     # Gzip pages and the app's JavaScript: first visits download far less.
     compress=True,
 )
@@ -70,7 +70,7 @@ app.layout = html.Div(
                     ],
                     className="top-bar",
                 ),
-                html.H1("Apothicaire", className="main-title"),
+                html.H1("AP Terminal", className="main-title"),
                 # Navigation Bar
                 html.Div(
                     [

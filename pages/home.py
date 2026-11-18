@@ -22,7 +22,7 @@ from Services.news import NewsFetchError, fetch_market_news, fetch_portfolio_new
 from Services.sentiment import score_articles
 from Services.updater import update_prices
 
-dash.register_page(__name__, path="/", name="Home", title="Apothicaire", order=0)
+dash.register_page(__name__, path="/", name="Home", title="AP Terminal", order=0)
 
 
 def layout(**_kwargs):
@@ -32,7 +32,7 @@ def layout(**_kwargs):
             dcc.Store(id="home-name", data=name.title() if name else ""),
             html.Div(
                 [
-                    html.Div("Apothicaire", className="home-wordmark"),
+                    html.Div("AP Terminal", className="home-wordmark"),
                     html.H2(id="home-greeting", className="home-greeting"),
                     html.P(id="home-date", className="home-date"),
                 ],

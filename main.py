@@ -17,5 +17,5 @@ if __name__ == "__main__":
     # The debug reloader runs this file twice; open the browser only once.
     if not debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
         threading.Timer(1.5, webbrowser.open, args=(url,)).start()
-    print(f"\n  Apothicaire is running at {url}\n  Close this window to stop it.\n")
+    print(f"\n  AP Terminal is running at {url}\n  Close this window to stop it.\n")
     app.run(host="127.0.0.1", port=port, debug=debug)

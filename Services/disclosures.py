@@ -6,7 +6,7 @@ from dash import html
 # (e.g. FINRA Rule 2214 for hypothetical projections). It is not legal advice;
 # have it reviewed if the site is ever offered beyond friends and family.
 POINTS = [
-    "Apothicaire is a personal record-keeping and educational tool. It is not a "
+    "AP Terminal is a personal record-keeping and educational tool. It is not a "
     "broker-dealer, investment adviser or FINRA member, and nothing on this site is a "
     "recommendation, an offer or solicitation to buy or sell any security, or "
     "investment, tax or legal advice.",

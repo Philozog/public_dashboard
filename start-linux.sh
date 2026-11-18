@@ -1,5 +1,5 @@
 #!/bin/bash
-# Run ./start-linux.sh to install (first time only) and start Apothicaire.
+# Run ./start-linux.sh to install (first time only) and start AP Terminal.
 cd "$(dirname "$0")" || exit 1
 
 fail() {
