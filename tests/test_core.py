@@ -451,3 +451,23 @@ class ScenarioAssumptionTests(unittest.TestCase):
         for kwargs in [dict(shrinkage=1.5), dict(cap=0), dict(long_run=0.9), dict(shocks="cauchy")]:
             with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
                 performance.simulate_paths(self.returns, self.weights, 1000, 1, 500, **kwargs)
+
+
+class DrawdownSummaryTests(unittest.TestCase):
+    def test_worst_current_and_longest_underwater(self):
+        dates = pd.bdate_range("2026-01-01", periods=8)
+        # Up, fall 20%, recover to a new high, then a small dip at the end.
+        wealth = pd.Series([100, 110, 99, 88, 100, 115, 120, 114], index=dates)
+        summary = performance.drawdown_summary(wealth.pct_change().fillna(0))
+        self.assertAlmostEqual(summary["worst"], 88 / 110 - 1)
+        self.assertEqual(summary["worst_date"], dates[3])
+        self.assertAlmostEqual(summary["current"], 114 / 120 - 1)
+        # Below the 110 high from day 2 (Jan 2) until the new high on day 6 (Jan 8).
+        self.assertEqual(summary["longest_days"], (dates[5] - dates[1]).days)
+        self.assertTrue(summary["longest_recovered"])
+
+    def test_not_yet_recovered(self):
+        returns = pd.Series([0.0, -0.1, 0.02], index=pd.bdate_range("2026-01-01", periods=3))
+        summary = performance.drawdown_summary(returns)
+        self.assertFalse(summary["longest_recovered"])
+        self.assertLess(summary["current"], 0)

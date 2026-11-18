@@ -19,7 +19,7 @@ from Services.performance import (
     compute_portfolio_returns,
     compute_returns,
     compute_ttwr,
-    drawdowns,
+    drawdown_summary,
 )
 from Services.settings import get_settings
 from Services.theme import blank_figure
@@ -53,7 +53,7 @@ layout = html.Div(
                     ),
                     html.Div(id="analytics-status", className="data-status"),
                     dcc.Graph(id="performance_chart", figure=blank_figure()),
-                    dcc.Graph(id="drawdown_chart", figure=blank_figure()),
+                    html.Div(id="drawdown-summary"),
                 ]
             ),
             type="circle",
@@ -63,9 +63,73 @@ layout = html.Div(
 )
 
 
+def _duration(days):
+    if days < 1:
+        return "None"
+    if days < 45:
+        return f"{days} days"
+    months = round(days / 30.4)
+    return (
+        f"{months} month{'s' if months != 1 else ''}" if months < 24 else f"{days / 365:.1f} years"
+    )
+
+
+def _drawdown_cards(mine, market, benchmark):
+    if not mine:
+        return ""
+
+    def card(title, value, detail):
+        return html.Div(
+            [
+                html.Div(title, className="metric-title"),
+                html.Div(value, className="metric-value"),
+                html.Div(detail, className="home-detail"),
+            ],
+            className="metric-card",
+        )
+
+    market_text = f"{benchmark}: {market['worst']:.1%}" if market else f"{benchmark}: n/a"
+    current = mine["current"]
+    return html.Div(
+        [
+            html.H3(
+                "How far it fell from its high", className="card-title", style={"marginTop": "24px"}
+            ),
+            html.P(
+                "A drop is measured from the highest value reached before it, using today's holdings "
+                "over the history window.",
+                className="muted",
+                style={"margin": "0 0 10px", "fontSize": "13px"},
+            ),
+            html.Div(
+                [
+                    card(
+                        "Worst drop",
+                        f"{mine['worst']:.1%}",
+                        f"{market_text} · lowest point {mine['worst_date']:%d %b %Y}",
+                    ),
+                    card(
+                        "Below its high today",
+                        "At its high" if current > -0.0005 else f"{current:.1%}",
+                        f"{benchmark}: at its high"
+                        if market and market["current"] > -0.0005
+                        else (f"{benchmark}: {market['current']:.1%}" if market else ""),
+                    ),
+                    card(
+                        "Longest time below a high",
+                        _duration(mine["longest_days"]),
+                        "Recovered" if mine["longest_recovered"] else "Not yet recovered",
+                    ),
+                ],
+                className="summary-grid",
+            ),
+        ]
+    )
+
+
 @dash.callback(
     Output("performance_chart", "figure"),
-    Output("drawdown_chart", "figure"),
+    Output("drawdown-summary", "children"),
     Output("sharpe", "children"),
     Output("sortino", "children"),
     Output("beta", "children"),
@@ -82,7 +146,7 @@ def update_analytics(pathname, period="1y", benchmark="SPY", _version=None):
     empty = px.line()
 
     def unavailable(message):
-        return empty, empty, *("N/A",) * 6, message
+        return empty, "", *("N/A",) * 6, message
 
     holdings = load_data()
     if holdings.empty or holdings.market_value.sum() <= 0:
@@ -125,12 +189,7 @@ def update_analytics(pathname, period="1y", benchmark="SPY", _version=None):
         labels={"value": "Return", "index": "Date"},
     )
     perf.update_yaxes(tickformat=".1%")
-    dd = px.area(
-        drawdowns(portfolio).rename("Drawdown"),
-        title="Drawdown from starting value or later peak",
-    )
-    dd.update_layout(showlegend=False)
-    dd.update_yaxes(tickformat=".1%")
+    dd = _drawdown_cards(drawdown_summary(portfolio), drawdown_summary(bench), benchmark)
 
     def fmt(value, percent=False):
         return (

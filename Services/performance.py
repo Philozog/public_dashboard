@@ -32,6 +32,37 @@ def drawdowns(returns):
     return wealth / wealth.cummax().clip(lower=1) - 1
 
 
+def drawdown_summary(returns):
+    """Worst fall from a high, how far below its high it is now, and the
+    longest stretch spent below a previous high (in calendar days)."""
+    dd = drawdowns(returns.dropna())
+    if dd.empty:
+        return None
+    worst_date = dd.idxmin()
+    below = dd < -1e-9
+    longest, longest_recovered, start = 0, True, None
+    index = list(dd.index)
+    for i, flag in enumerate(below):
+        if flag and start is None:
+            start = index[i - 1] if i else index[i]
+        if not flag and start is not None:
+            span = (index[i] - start).days if hasattr(index[i], "day") else i
+            if span > longest:
+                longest, longest_recovered = span, True
+            start = None
+    if start is not None:
+        span = (index[-1] - start).days if hasattr(index[-1], "day") else len(index)
+        if span >= longest:
+            longest, longest_recovered = span, False
+    return {
+        "worst": float(dd.min()),
+        "worst_date": worst_date,
+        "current": float(dd.iloc[-1]),
+        "longest_days": int(longest),
+        "longest_recovered": longest_recovered,
+    }
+
+
 def compute_performance_metrics(
     portfolio_returns, benchmark_returns, risk_free=ANNUAL_RISK_FREE_RATE
 ):

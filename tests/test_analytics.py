@@ -62,8 +62,10 @@ class AlphaTests(unittest.TestCase):
             result = analytics.update_analytics("/analytics")
         self.assertEqual(result[4], "1.00")
         self.assertAlmostEqual(float(result[5].rstrip("%")), 0)
-        self.assertEqual(result[1].data[0].name, "Drawdown")
-        self.assertFalse(result[1].layout.showlegend)
+        text = str(result[1])
+        self.assertIn("Worst drop", text)
+        self.assertIn("Below its high today", text)
+        self.assertIn("Longest time below a high", text)
 
 
 if __name__ == "__main__":
