@@ -1565,3 +1565,11 @@ details > summary { cursor: pointer; padding: 8px 0; font-weight: 700; }
 }
 .mc-help { color: var(--muted); font-size: 12px; line-height: 1.45; }
 .mc-assumptions { align-items: start; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+
+/* Correlations: money vs risk */
+.risk-takeaway { font-size: 16px; font-weight: 600; color: var(--text-strong); margin: 4px 0 0; }
+.risk-table { border-collapse: collapse; width: 100%; font-size: 14px; margin: 8px 0 12px; }
+.risk-table th, .risk-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
+.risk-table th:first-child, .risk-table td:first-child { text-align: left; }
+.risk-table th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+.title-link { text-decoration: none; color: inherit; display: block; }

@@ -68,3 +68,30 @@ class AlphaTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RiskVsWeightTests(unittest.TestCase):
+    def test_ratio_volatility_and_takeaway(self):
+        import numpy as np
+
+        from Services.performance import risk_takeaway, risk_vs_weight
+
+        rng = np.random.default_rng(0)
+        market = rng.normal(0, 0.01, 300)
+        returns = pd.DataFrame(
+            {
+                "HOT": market * 2.5 + rng.normal(0, 0.01, 300),
+                "CALM": market * 0.4 + rng.normal(0, 0.003, 300),
+                "MID": market + rng.normal(0, 0.006, 300),
+            }
+        )
+        weights = pd.Series({"HOT": 0.2, "CALM": 0.5, "MID": 0.3})
+        table = risk_vs_weight(returns, weights)
+        self.assertEqual(table.index[0], "HOT")  # most risk per dollar first
+        self.assertAlmostEqual(table["risk"].sum(), 1)
+        self.assertAlmostEqual(table.loc["HOT", "ratio"], table.loc["HOT", "risk"] / 0.2)
+        self.assertGreater(table.loc["HOT", "volatility"], table.loc["CALM", "volatility"])
+        self.assertLess(table.loc["CALM", "ratio"], 1)
+        text = risk_takeaway(table)
+        self.assertTrue(text.startswith("HOT"), text)
+        self.assertIn("of your money but", text)
