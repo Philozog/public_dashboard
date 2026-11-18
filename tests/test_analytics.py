@@ -63,9 +63,9 @@ class AlphaTests(unittest.TestCase):
         self.assertEqual(result[4], "1.00")
         self.assertAlmostEqual(float(result[5].rstrip("%")), 0)
         text = str(result[1])
-        self.assertIn("Worst drop", text)
-        self.assertIn("Below its high today", text)
-        self.assertIn("Longest time below a high", text)
+        self.assertIn("Biggest fall from a peak", text)
+        self.assertIn("Down from peak today", text)
+        self.assertIn("Longest recovery time", text)
 
 
 if __name__ == "__main__":

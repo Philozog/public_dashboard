@@ -78,12 +78,15 @@ def _drawdown_cards(mine, market, benchmark):
     if not mine:
         return ""
 
-    def card(title, value, detail):
+    def card(title, value, detail, meaning):
         return html.Div(
             [
                 html.Div(title, className="metric-title"),
                 html.Div(value, className="metric-value"),
                 html.Div(detail, className="home-detail"),
+                html.Div(
+                    meaning, className="muted", style={"fontSize": "12px", "marginTop": "6px"}
+                ),
             ],
             className="metric-card",
         )
@@ -96,29 +99,32 @@ def _drawdown_cards(mine, market, benchmark):
                 "How far it fell from its high", className="card-title", style={"marginTop": "24px"}
             ),
             html.P(
-                "A drop is measured from the highest value reached before it, using today's holdings "
-                "over the history window.",
+                "Based on today's holdings over the History window chosen at the top of the page.",
                 className="muted",
                 style={"margin": "0 0 10px", "fontSize": "13px"},
             ),
             html.Div(
                 [
                     card(
-                        "Worst drop",
+                        "Biggest fall from a peak",
                         f"{mine['worst']:.1%}",
                         f"{market_text} · lowest point {mine['worst_date']:%d %b %Y}",
+                        "The largest drop from a high point to a later low point in this period.",
                     ),
                     card(
-                        "Below its high today",
+                        "Down from peak today",
                         "At its high" if current > -0.0005 else f"{current:.1%}",
                         f"{benchmark}: at its high"
                         if market and market["current"] > -0.0005
                         else (f"{benchmark}: {market['current']:.1%}" if market else ""),
+                        "How far today's value is below the best value reached in this period.",
                     ),
                     card(
-                        "Longest time below a high",
+                        "Longest recovery time",
                         _duration(mine["longest_days"]),
                         "Recovered" if mine["longest_recovered"] else "Not yet recovered",
+                        "The longest it took to get back to a previous high, or how long it has "
+                        "been waiting so far.",
                     ),
                 ],
                 className="summary-grid",
