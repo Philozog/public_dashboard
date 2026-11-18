@@ -95,20 +95,25 @@ def _simulate_portfolio_paths(returns, weights, initial_value, years, simulation
 
 
 SHOCK_LABELS = {
-    "normal": "Normal (bell curve)",
-    "student_t": "Fat tails (Student-t)",
-    "bootstrap": "Historical days (bootstrap)",
+    "normal": "Typical market",
+    "student_t": "Bigger crashes possible",
+    "bootstrap": "Replay real past moves",
+}
+SHOCK_HELP = {
+    "normal": "Ups and downs follow a smooth bell curve. Simple, but rare crashes look rarer than they really are.",
+    "student_t": "Some simulated years are calm and some are crisis-like (like 2008 or 2020). Shows a harsher worst case.",
+    "bootstrap": "Strings together month-long stretches of your stocks' actual price history, including any real crashes in it.",
 }
 
 
-def _assumption_input(label, input_id, value, minimum, maximum):
+def _assumption_input(label, input_id, value, help_text):
     return html.Div(
         [
             html.Label(label, htmlFor=input_id),
             # No min/max on the box: Dash would silently blank an out-of-range value and the
             # default would be used. The model checks the range and says what's wrong.
             dcc.Input(id=input_id, type="number", value=value, step="any"),
-            html.Div(f"{minimum:g} to {maximum:g}", className="muted", style={"fontSize": "12px"}),
+            html.Div(help_text, className="mc-help"),
         ],
         className="form-field",
     )
@@ -277,24 +282,23 @@ def _build_explanation(
             html.Ul(
                 [
                     html.Li(
-                        f"Long-run return {long_run:.1%}: the biggest single driver of the middle "
-                        "scenario. It is a choice, not something the data estimated."
+                        f"Expected yearly return {long_run:.1%}: the biggest single driver of the "
+                        "middle scenario. It is a choice, not something the data estimated."
                     ),
                     html.Li(
-                        f"Weight on history {shrinkage:.0%}: each holding's expected return is "
-                        f"{shrinkage:.0%} its own past return and {1 - shrinkage:.0%} the long-run "
-                        "return, because past returns are very noisy."
+                        f"Trust in past performance {shrinkage:.0%}: each holding's expected return is "
+                        f"{shrinkage:.0%} its own recent return and {1 - shrinkage:.0%} the expected "
+                        "yearly return, because recent returns are very noisy."
                     ),
                     html.Li(
-                        f"Return cap ±{cap:.0%}: no holding is assumed to earn more (or lose more) "
+                        f"Limit per stock ±{cap:.0%}: no holding is assumed to earn more (or lose more) "
                         "than this per year on average."
                     ),
                     html.Li(
-                        f"Shocks: {SHOCK_LABELS[shocks]}. The bell curve understates crashes like "
-                        "2008 or March 2020, so its worst scenarios are probably too optimistic. "
-                        "Fat tails lets each simulated year be calmer or far more turbulent than "
-                        "the history; Historical days replays month-long stretches of your actual "
-                        "history. Compare the one-in-a-hundred figure across settings."
+                        f"Market swings: {SHOCK_LABELS[shocks]}. {SHOCK_HELP[shocks]} The "
+                        "typical-market setting understates crashes like 2008 or March 2020, so "
+                        "its worst scenarios are probably too optimistic. Compare the "
+                        "one-in-a-hundred figure across settings."
                     ),
                     html.Li(
                         f"Volatility and correlations come from the {period} history window. In a "
@@ -370,25 +374,29 @@ layout = html.Div(
                 html.Div(
                     [
                         _assumption_input(
-                            "Long-run return (%/yr)",
+                            "Expected yearly return (%)",
                             "mc-long-run",
                             round(BENCHMARK_ANNUAL_RETURN * 100, 2),
-                            -20,
-                            30,
+                            "What a typical year earns over the long run. 6 to 8 is a common "
+                            "stock-market guess. Has the biggest effect on the result.",
                         ),
                         _assumption_input(
-                            "Weight on history (%)",
+                            "Trust in past performance (%)",
                             "mc-shrinkage",
                             round(DRIFT_SHRINKAGE * 100),
-                            0,
-                            100,
+                            "0 = ignore how your stocks did lately and use the yearly return "
+                            "above. 100 = assume their recent pace continues.",
                         ),
                         _assumption_input(
-                            "Return cap (± %/yr)", "mc-cap", round(MAX_ANNUAL_DRIFT * 100), 1, 100
+                            "Limit per stock (± %/yr)",
+                            "mc-cap",
+                            round(MAX_ANNUAL_DRIFT * 100),
+                            "No stock is assumed to gain or lose more than this per year on "
+                            "average, so one hot stock can't take over the result.",
                         ),
                         html.Div(
                             [
-                                html.Label("Shocks", htmlFor="mc-shocks"),
+                                html.Label("Market swings", htmlFor="mc-shocks"),
                                 dcc.Dropdown(
                                     id="mc-shocks",
                                     options=[
@@ -397,6 +405,10 @@ layout = html.Div(
                                     ],
                                     value="normal",
                                     clearable=False,
+                                    searchable=False,
+                                ),
+                                html.Div(
+                                    SHOCK_HELP["normal"], id="mc-shocks-help", className="mc-help"
                                 ),
                             ],
                             className="form-field",
@@ -405,9 +417,9 @@ layout = html.Div(
                     className="holding-form mc-assumptions",
                 ),
                 html.P(
-                    "Fixed in this model: weights stay constant and are rebalanced daily; volatility "
-                    "and correlations come from the History window above; no contributions, "
-                    "withdrawals, fees or taxes; 252 trading days a year.",
+                    "Also assumed: you don't buy, sell, add or withdraw money; no fees or taxes; how "
+                    "much your stocks swing and move together is based on the History window "
+                    "at the top of the page.",
                     className="muted",
                     style={"margin": "10px 0 0", "fontSize": "13px"},
                 ),
@@ -575,8 +587,9 @@ if not hasattr(dash, "_monte_carlo_callback_registered"):
         status_parts = [
             f"Simulated {int(simulations or DEFAULT_SIMULATIONS):,} paths over "
             f"{int(years or DEFAULT_YEARS)} year{'s' if int(years or DEFAULT_YEARS) != 1 else ''}"
-            f" ({SHOCK_LABELS[assumptions['shocks']]}, long-run {assumptions['long_run']:.1%},"
-            f" {assumptions['shrinkage']:.0%} history, cap ±{assumptions['cap']:.0%}).",
+            f" (market swings: {SHOCK_LABELS[assumptions['shocks']].lower()}, expected return"
+            f" {assumptions['long_run']:.1%}, trust in past {assumptions['shrinkage']:.0%},"
+            f" limit ±{assumptions['cap']:.0%}).",
             f"Using {n} of {cache['total_tickers']} holdings."
             f" Observations per ticker: {cache['min_obs']}–{cache['max_obs']} trading days.",
             cache["coverage"],
@@ -611,3 +624,8 @@ if not hasattr(dash, "_monte_carlo_callback_registered"):
                 **assumptions,
             ),
         )
+
+
+@dash.callback(Output("mc-shocks-help", "children"), Input("mc-shocks", "value"))
+def _describe_shocks(choice):
+    return SHOCK_HELP.get(choice, "")

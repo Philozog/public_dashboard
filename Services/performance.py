@@ -129,11 +129,11 @@ def simulate_paths(
         raise ValueError("Unsupported simulation size.")
     long_run, shrinkage, cap = float(long_run), float(shrinkage), float(cap)
     if not -0.5 < long_run < 0.5:
-        raise ValueError("Long-run return must be between -50% and 50%.")
+        raise ValueError("Expected yearly return must be between -50% and 50%.")
     if not 0 <= shrinkage <= 1:
-        raise ValueError("Weight on history must be between 0% and 100%.")
+        raise ValueError("Trust in past performance must be between 0% and 100%.")
     if not 0 < cap <= 1:
-        raise ValueError("Return cap must be between 0% and 100%.")
+        raise ValueError("Limit per stock must be above 0% and at most 100%.")
     if shocks not in SHOCK_MODELS:
         raise ValueError("Unknown shock model.")
     complete = returns.replace([np.inf, -np.inf], np.nan).dropna()
