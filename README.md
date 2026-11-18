@@ -1,4 +1,4 @@
-# Apothicaire — Risk Management
+# AP Terminal — Risk Management
 
 A free portfolio dashboard that runs on your own computer. Record your stocks,
 then see your performance against the S&P 500, risk and correlations,
@@ -18,7 +18,7 @@ On Windows, tick **"Add python.exe to PATH"** on the first installer screen.
 ### 2. Download the dashboard
 
 On this GitHub page, click the green **Code** button → **Download ZIP**, then
-unzip it somewhere short like `C:\Apothicaire` or your Documents folder.
+unzip it somewhere short like `C:\APTerminal` or your Documents folder.
 
 ### 3. Double-click to start
 

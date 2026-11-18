@@ -108,7 +108,7 @@ def _check(users, shared_password, name, password):
 LOGIN_PAGE = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sign in · Apothicaire</title>
+<title>Sign in · AP Terminal</title>
 <style>
   :root {{ color-scheme: dark; }}
   body {{ margin: 0; min-height: 100vh; display: grid; place-items: center;
@@ -125,7 +125,7 @@ LOGIN_PAGE = """<!doctype html>
   .error {{ margin: 14px 0 0; color: #fca5a5; font-size: 14px; }}
 </style></head>
 <body><form method="post" action="/login">
-  <h1>APOTHICAIRE</h1>
+  <h1>AP TERMINAL</h1>
   <p>Sign in to see your portfolio.</p>
   <label for="name">Name</label>
   <input id="name" name="name" autocomplete="username" autocapitalize="none" value="{name}" required>
