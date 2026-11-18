@@ -90,8 +90,28 @@ def _build_weights(holdings, valid_tickers):
     return position_values / total_value, total_value
 
 
-def _simulate_portfolio_paths(returns, weights, initial_value, years, simulations):
-    return simulate_paths(returns, weights, initial_value, years, simulations)
+def _simulate_portfolio_paths(returns, weights, initial_value, years, simulations, **assumptions):
+    return simulate_paths(returns, weights, initial_value, years, simulations, **assumptions)
+
+
+SHOCK_LABELS = {
+    "normal": "Normal (bell curve)",
+    "student_t": "Fat tails (Student-t)",
+    "bootstrap": "Historical days (bootstrap)",
+}
+
+
+def _assumption_input(label, input_id, value, minimum, maximum):
+    return html.Div(
+        [
+            html.Label(label, htmlFor=input_id),
+            # No min/max on the box: Dash would silently blank an out-of-range value and the
+            # default would be used. The model checks the range and says what's wrong.
+            dcc.Input(id=input_id, type="number", value=value, step="any"),
+            html.Div(f"{minimum:g} to {maximum:g}", className="muted", style={"fontSize": "12px"}),
+        ],
+        className="form-field",
+    )
 
 
 def _format_currency(value):
@@ -222,30 +242,72 @@ def _build_distribution_chart(final_values, initial_value):
 
 
 def _build_explanation(
-    current_value, median_value, downside_value, upside_value, loss_probability, years, simulations
+    current_value,
+    median_value,
+    downside_value,
+    upside_value,
+    loss_probability,
+    years,
+    simulations,
+    severe_value,
+    long_run,
+    shrinkage,
+    cap,
+    shocks,
+    period,
 ):
+    plural = "s" if years != 1 else ""
     return html.Div(
         [
             html.H4("How to read this", style={"marginTop": "0"}),
             html.P(
-                f"This page takes your current holdings, converts them into portfolio weights, "
-                f"uses the common history shown above, and runs {simulations:,} random future paths "
-                f"over {years} year{'s' if years != 1 else ''}."
+                f"These are {simulations:,} illustrative scenarios over {years} year{plural}, built "
+                "from your current weights and the assumptions above. They show what could happen "
+                "if those assumptions hold; they are not a forecast of what will happen."
             ),
             html.P(
-                f"The median path ends near {_format_currency(median_value)}. "
-                f"The 5th percentile ends near {_format_currency(downside_value)}, which is a rough stress case, "
-                f"and the 95th percentile ends near {_format_currency(upside_value)}, which is a strong upside case."
+                f"The middle scenario ends near {_format_currency(median_value)}. One in twenty "
+                f"scenarios ends below {_format_currency(downside_value)} and one in twenty above "
+                f"{_format_currency(upside_value)}. One in a hundred ends below "
+                f"{_format_currency(severe_value)}. {_format_percent(loss_probability)} of scenarios "
+                f"end below today's {_format_currency(current_value)}. That share comes from the "
+                "assumptions, so it is not a real-world probability."
             ),
-            html.P(
-                f"Starting from {_format_currency(current_value)}, the model estimates a "
-                f"{_format_percent(loss_probability)} chance of finishing below today's value."
-            ),
-            html.P(
-                f"This model rebalances daily to current invested weights and excludes cash and uncovered holdings. Volatility and correlations come from shared history; "
-                f"each holding's expected return is shrunk {DRIFT_SHRINKAGE:.0%} toward a {_format_percent(BENCHMARK_ANNUAL_RETURN)} "
-                f"long-run benchmark and capped at {_format_percent(MAX_ANNUAL_DRIFT)}, so a stock's recent rally or slump isn't "
-                f"assumed to continue at the same pace. It does not model trading, contributions, taxes, or regime changes."
+            html.H4("What drives the result"),
+            html.Ul(
+                [
+                    html.Li(
+                        f"Long-run return {long_run:.1%}: the biggest single driver of the middle "
+                        "scenario. It is a choice, not something the data estimated."
+                    ),
+                    html.Li(
+                        f"Weight on history {shrinkage:.0%}: each holding's expected return is "
+                        f"{shrinkage:.0%} its own past return and {1 - shrinkage:.0%} the long-run "
+                        "return, because past returns are very noisy."
+                    ),
+                    html.Li(
+                        f"Return cap ±{cap:.0%}: no holding is assumed to earn more (or lose more) "
+                        "than this per year on average."
+                    ),
+                    html.Li(
+                        f"Shocks: {SHOCK_LABELS[shocks]}. The bell curve understates crashes like "
+                        "2008 or March 2020, so its worst scenarios are probably too optimistic. "
+                        "Fat tails lets each simulated year be calmer or far more turbulent than "
+                        "the history; Historical days replays month-long stretches of your actual "
+                        "history. Compare the one-in-a-hundred figure across settings."
+                    ),
+                    html.Li(
+                        f"Volatility and correlations come from the {period} history window. In a "
+                        "crisis, correlations tend to jump, so diversification can look better here "
+                        "than it is when it's needed most."
+                    ),
+                    html.Li(
+                        "Weights stay fixed and are rebalanced daily, with no trading costs, "
+                        "contributions, withdrawals, fees or taxes. Cash and holdings without "
+                        "price history are left out. Annual figures use 252 trading days."
+                    ),
+                ],
+                style={"lineHeight": "1.6"},
             ),
         ],
         className="panel",
@@ -255,6 +317,14 @@ def _build_explanation(
 layout = html.Div(
     [
         html.H2("Portfolio Monte Carlo Simulation", className="subtitle"),
+        html.Div(
+            [
+                html.B("Illustrative scenarios under stated assumptions, not a forecast. "),
+                "The range below shows what could happen if the assumptions listed hold. "
+                "Change them to see how sensitive the results are.",
+            ],
+            className="mc-notice",
+        ),
         html.Div(
             [
                 html.Div(
@@ -295,6 +365,63 @@ layout = html.Div(
             className="mc-controls",
         ),
         html.Div(
+            [
+                html.Div("Assumptions", className="card-title"),
+                html.Div(
+                    [
+                        _assumption_input(
+                            "Long-run return (%/yr)",
+                            "mc-long-run",
+                            round(BENCHMARK_ANNUAL_RETURN * 100, 2),
+                            -20,
+                            30,
+                        ),
+                        _assumption_input(
+                            "Weight on history (%)",
+                            "mc-shrinkage",
+                            round(DRIFT_SHRINKAGE * 100),
+                            0,
+                            100,
+                        ),
+                        _assumption_input(
+                            "Return cap (± %/yr)", "mc-cap", round(MAX_ANNUAL_DRIFT * 100), 1, 100
+                        ),
+                        html.Div(
+                            [
+                                html.Label("Shocks", htmlFor="mc-shocks"),
+                                dcc.Dropdown(
+                                    id="mc-shocks",
+                                    options=[
+                                        {"label": label, "value": value}
+                                        for value, label in SHOCK_LABELS.items()
+                                    ],
+                                    value="normal",
+                                    clearable=False,
+                                ),
+                            ],
+                            className="form-field",
+                        ),
+                    ],
+                    className="holding-form mc-assumptions",
+                ),
+                html.P(
+                    "Fixed in this model: weights stay constant and are rebalanced daily; volatility "
+                    "and correlations come from the History window above; no contributions, "
+                    "withdrawals, fees or taxes; 252 trading days a year.",
+                    className="muted",
+                    style={"margin": "10px 0 0", "fontSize": "13px"},
+                ),
+            ],
+            className="card",
+            # Keep the Shocks list above the result boxes when it opens.
+            style={
+                "marginBottom": "12px",
+                "position": "relative",
+                "zIndex": 20,
+                "overflow": "visible",
+            },
+        ),
+        html.Div(
             "Choose a time horizon and how many simulations to run, then press Run simulation.",
             id="mc-status",
             className="mc-status",
@@ -305,11 +432,11 @@ layout = html.Div(
                     html.Div(
                         [
                             _metric_card("Modeled holdings value", "mc-current-value"),
-                            _metric_card("Median Ending Value", "mc-median-value"),
-                            _metric_card("5th Percentile", "mc-downside-value"),
-                            _metric_card("95th Percentile", "mc-upside-value"),
-                            _metric_card("Chance of Loss", "mc-loss-probability"),
-                            _metric_card("Median CAGR", "mc-cagr"),
+                            _metric_card("Middle scenario (median)", "mc-median-value"),
+                            _metric_card("Low scenario (5th pct)", "mc-downside-value"),
+                            _metric_card("High scenario (95th pct)", "mc-upside-value"),
+                            _metric_card("Scenarios below today", "mc-loss-probability"),
+                            _metric_card("Middle scenario yearly return", "mc-cagr"),
                         ],
                         style={
                             "display": "flex",
@@ -392,9 +519,13 @@ if not hasattr(dash, "_monte_carlo_callback_registered"):
         State("mc-years", "value"),
         State("mc-simulations", "value"),
         State("analysis-period", "value"),
+        State("mc-long-run", "value"),
+        State("mc-shrinkage", "value"),
+        State("mc-cap", "value"),
+        State("mc-shocks", "value"),
         prevent_initial_call=True,
     )
-    def update_monte_carlo(_clicks, years, simulations, period):
+    def update_monte_carlo(_clicks, years, simulations, period, long_run, shrinkage, cap, shocks):
         """Runs only when the Run simulation button is pressed."""
         cache = fetch_prices(period or "1y")
         empty_projection = _empty_figure(
@@ -413,25 +544,39 @@ if not hasattr(dash, "_monte_carlo_callback_registered"):
         weights = pd.read_json(StringIO(cache["weights_json"]), orient="split", typ="series")
         current_value = float(cache["current_value"])
 
-        years_axis, path_values = _simulate_portfolio_paths(
-            returns=returns,
-            weights=weights,
-            initial_value=current_value,
-            years=int(years or DEFAULT_YEARS),
-            simulations=int(simulations or DEFAULT_SIMULATIONS),
+        assumptions = dict(
+            long_run=(BENCHMARK_ANNUAL_RETURN * 100 if long_run is None else long_run) / 100,
+            shrinkage=(DRIFT_SHRINKAGE * 100 if shrinkage is None else shrinkage) / 100,
+            cap=(MAX_ANNUAL_DRIFT * 100 if cap is None else cap) / 100,
+            shocks=shocks or "normal",
         )
+        try:
+            years_axis, path_values = _simulate_portfolio_paths(
+                returns=returns,
+                weights=weights,
+                initial_value=current_value,
+                years=int(years or DEFAULT_YEARS),
+                simulations=int(simulations or DEFAULT_SIMULATIONS),
+                **assumptions,
+            )
+        except ValueError as exc:
+            message = f"Not run: {exc}"
+            return (message, empty_projection, empty_distribution, *blank, html.Div(message))
 
         final_values = path_values[-1]
         median_value = float(np.percentile(final_values, 50))
         downside_value = float(np.percentile(final_values, 5))
         upside_value = float(np.percentile(final_values, 95))
+        severe_value = float(np.percentile(final_values, 1))
         loss_probability = float(np.mean(final_values < current_value))
         median_cagr = float((median_value / current_value) ** (1 / max(int(years), 1)) - 1)
 
         n = len(cache["valid_tickers"])
         status_parts = [
             f"Simulated {int(simulations or DEFAULT_SIMULATIONS):,} paths over "
-            f"{int(years or DEFAULT_YEARS)} year{'s' if int(years or DEFAULT_YEARS) != 1 else ''}.",
+            f"{int(years or DEFAULT_YEARS)} year{'s' if int(years or DEFAULT_YEARS) != 1 else ''}"
+            f" ({SHOCK_LABELS[assumptions['shocks']]}, long-run {assumptions['long_run']:.1%},"
+            f" {assumptions['shrinkage']:.0%} history, cap ±{assumptions['cap']:.0%}).",
             f"Using {n} of {cache['total_tickers']} holdings."
             f" Observations per ticker: {cache['min_obs']}–{cache['max_obs']} trading days.",
             cache["coverage"],
@@ -459,5 +604,10 @@ if not hasattr(dash, "_monte_carlo_callback_registered"):
                 loss_probability=loss_probability,
                 years=int(years or DEFAULT_YEARS),
                 simulations=int(simulations or DEFAULT_SIMULATIONS),
+                severe_value=severe_value,
+                period={"6mo": "6-month", "1y": "1-year", "3y": "3-year", "5y": "5-year"}.get(
+                    cache.get("period"), "selected"
+                ),
+                **assumptions,
             ),
         )

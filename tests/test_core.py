@@ -400,3 +400,54 @@ class PriceCacheTests(unittest.TestCase):
             market.get_historical_prices(["AAA", "BAD"], "1y")
         self.assertEqual(list(prices.columns), ["AAA"])
         self.assertEqual(fetch.call_count, 1)
+
+
+class ScenarioAssumptionTests(unittest.TestCase):
+    def setUp(self):
+        rng = np.random.default_rng(7)
+        self.returns = pd.DataFrame(rng.normal(0.0003, 0.012, (300, 2)), columns=["A", "B"])
+        self.weights = pd.Series({"A": 0.5, "B": 0.5})
+
+    def median_end(self, **kwargs):
+        return np.median(
+            performance.simulate_paths(self.returns, self.weights, 1000, 3, 1000, **kwargs)[1][-1]
+        )
+
+    def test_long_run_return_moves_the_median(self):
+        self.assertLess(
+            self.median_end(long_run=0.04, shrinkage=0), self.median_end(long_run=0.10, shrinkage=0)
+        )
+
+    def test_cap_bounds_expected_return(self):
+        hot = self.returns + 0.004  # ~100%+ a year of history
+        low = np.median(
+            performance.simulate_paths(hot, self.weights, 1000, 1, 1000, shrinkage=1, cap=0.05)[1][
+                -1
+            ]
+        )
+        high = np.median(
+            performance.simulate_paths(hot, self.weights, 1000, 1, 1000, shrinkage=1, cap=0.5)[1][
+                -1
+            ]
+        )
+        self.assertLess(low, 1100)
+        self.assertGreater(high, low)
+
+    def test_fat_tail_models_widen_the_downside(self):
+        def p1(shocks):
+            ends = performance.simulate_paths(
+                self.returns, self.weights, 1000, 1, 5000, shocks=shocks
+            )[1][-1]
+            return np.percentile(ends, 1) / np.median(ends)
+
+        self.assertLess(p1("student_t"), p1("normal"))
+        for shocks in performance.SHOCK_MODELS:
+            ends = performance.simulate_paths(
+                self.returns, self.weights, 1000, 1, 500, shocks=shocks
+            )[1]
+            self.assertTrue((ends > 0).all(), shocks)
+
+    def test_invalid_assumptions_are_rejected(self):
+        for kwargs in [dict(shrinkage=1.5), dict(cap=0), dict(long_run=0.9), dict(shocks="cauchy")]:
+            with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
+                performance.simulate_paths(self.returns, self.weights, 1000, 1, 500, **kwargs)
