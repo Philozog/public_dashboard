@@ -315,6 +315,7 @@ layout = html.Div(
                                     ],
                                     value="Core",
                                     clearable=False,
+                                    searchable=False,
                                     style={"width": "200px"},
                                 ),
                             ],
@@ -379,6 +380,7 @@ layout = html.Div(
                                 ],
                                 placeholder="Choose…",
                                 clearable=False,
+                                searchable=False,
                             ),
                         ),
                         _field(
@@ -449,6 +451,7 @@ layout = html.Div(
                                     {"label": "Unassigned", "value": "Unassigned"},
                                 ],
                                 clearable=False,
+                                searchable=False,
                             ),
                         ),
                     ],
@@ -469,7 +472,7 @@ layout = html.Div(
                 dcc.Store(id="edit-done"),
             ],
             id="edit-card",
-            className="card",
+            className="card edit-card",
             style={"display": "none"},
         ),
         # Holdings table

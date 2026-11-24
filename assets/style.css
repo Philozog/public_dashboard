@@ -1575,3 +1575,6 @@ details > summary { cursor: pointer; padding: 8px 0; font-weight: 700; }
 .title-link { text-decoration: none; color: inherit; display: block; }
 /* News page */
 .news-page-text { margin: 4px 0; color: var(--text); font-size: 14px; line-height: 1.5; }
+
+/* Keep the Edit box's dropdown above the Holdings table when it opens */
+.edit-card { position: relative; z-index: 20; overflow: visible; }
