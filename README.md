@@ -150,7 +150,8 @@ dependencies are installed; see [sentiment setup](docs/sentiment.md).
   contributions to portfolio risk and hypothetical shocks.
 - **Monte Carlo:** daily-rebalanced simulations with validated covariance and
   bounded memory use; covered holdings and actual history dates are disclosed.
-- **News / News Sentiment:** company-aware headlines and per-result scoring
+- **News:** the day's market headlines for everyone, with automated tone tags.
+- **Sentiment:** company-aware headlines and per-result scoring
   provenance, with invested-value coverage.
 - **Parameters:** allocation targets, concentration limit, drift tolerance,
   risk-free assumption and consistent database backups.
