@@ -1,4 +1,4 @@
-"""News Sentiment page.
+"""Sentiment page.
 
 Reads the same two sources the rest of the app already uses:
 
@@ -33,9 +33,9 @@ PER_TICKER = 8
 dash.register_page(
     __name__,
     path="/sentiment",
-    name="News Sentiment",
-    title="News Sentiment",
-    order=6,
+    name="Sentiment",
+    title="Sentiment",
+    order=7,
 )
 
 
@@ -413,7 +413,7 @@ layout = html.Div(
             [
                 html.Div(
                     [
-                        html.Div("News Sentiment", className="news-eyebrow"),
+                        html.Div("Sentiment", className="news-eyebrow"),
                         html.H2("How The Press Is Framing Your Holdings", className="news-heading"),
                         html.P(
                             "Every recent headline about a position, scored by a "

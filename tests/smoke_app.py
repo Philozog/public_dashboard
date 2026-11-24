@@ -17,6 +17,7 @@ for path in [
     "/sentiment",
     "/parameters",
     "/disclosures",
+    "/news",
     "/_dash-layout",
     "/_dash-dependencies",
 ]:

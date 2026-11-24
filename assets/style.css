@@ -1573,3 +1573,5 @@ details > summary { cursor: pointer; padding: 8px 0; font-weight: 700; }
 .risk-table th:first-child, .risk-table td:first-child { text-align: left; }
 .risk-table th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
 .title-link { text-decoration: none; color: inherit; display: block; }
+/* News page */
+.news-page-text { margin: 4px 0; color: var(--text); font-size: 14px; line-height: 1.5; }
